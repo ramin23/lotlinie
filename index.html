@@ -86,6 +86,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 .qm span{font-size:11.5px;font-weight:650;padding:5px 10px;border-radius:999px;
   background:#fff;border:1px solid var(--line)}
 #btnExamNext{flex:1 1 100%;padding:13px 16px;font-size:15px}
+#btnQuickSave{flex:1 1 100%;padding:13px 16px;font-size:15px}
 #guideBar .dots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
 #guideBar .dots i.on{background:var(--petrol)}
 
@@ -230,6 +231,9 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
     <div class="qm mono" id="quickMetrics" hidden></div>
     <div class="dots" id="guideDots"></div>
     <p class="hint" id="kiMsg" hidden style="margin:0 0 10px"></p>
+    <div class="row" id="quickRow" hidden>
+      <button class="btn small" id="btnQuickSave">✓ Aufnahme in Verlauf sichern</button>
+    </div>
     <div class="row" id="examRow" hidden>
       <button class="btn small" id="btnExamNext" disabled>Speichern & weiter →</button>
       <button class="btn ghost small" id="btnExamSkip">Überspringen</button>
@@ -295,7 +299,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 2.5 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 2.6 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -627,16 +631,31 @@ async function loadFile(file){
   prewarmKI();
   if(AUTO_KI) runKI();      /* Punkte direkt vorschlagen – nur noch korrigieren */
 }
-$('btnCam').addEventListener('click', ()=> $('fileCam').click());
-$('btnGal').addEventListener('click', ()=> $('fileGal').click());
+function guardUnsavedPhoto(){
+  if(img && state === 'done' && !exam){
+    if(editingId && sessions.some(x => x.id === editingId)) saveCurrentToVerlauf();
+    else if(confirm('Aktuelle Aufnahme zuerst in den Verlauf sichern?')) saveCurrentToVerlauf();
+  }
+}
+$('btnCam').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileCam').click(); });
+$('btnGal').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileGal').click(); });
 $('fileCam').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
 $('fileGal').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
-$('btnReplace').addEventListener('click', ()=> $('fileGal').click());
+$('btnReplace').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileGal').click(); });
 
 function setView(v, silent){
   if(!VIEWS[v] || v === view) return;
-  if(!silent && Object.keys(pts).length &&
-     !confirm('Ansicht wechseln? Die gesetzten Punkte werden entfernt.')) return;
+  if(!silent && Object.keys(pts).length){
+    if(state === 'done' && !exam){
+      if(editingId && sessions.some(x => x.id === editingId)){
+        saveCurrentToVerlauf();     /* bereits gesicherter Eintrag: still aktualisieren */
+      } else if(confirm('Aufnahme in den Verlauf sichern und Ansicht wechseln?\n(Abbrechen = hier bleiben, nichts geht verloren)')){
+        saveCurrentToVerlauf();
+      } else return;
+    } else if(!confirm('Ansicht wechseln? Die unfertigen Punkte werden entfernt.')){
+      return;
+    }
+  }
   view = v;
   for(const b of document.querySelectorAll('#segRow button')){
     const on = b.dataset.view === v;
@@ -863,6 +882,8 @@ function updateGuide(){
   }
   $('btnUndo').disabled = placeOrder.length === 0;
   $('btnKI').hidden = !(img && state === 'placing' && placedCount() === 0);
+  $('quickRow').hidden = !(!exam && img && state === 'done');
+  $('btnQuickSave').textContent = quickSaveLabel();
   updateAddBtn(); updateExamUI();
 }
 $('btnUndo').addEventListener('click', ()=>{
@@ -939,8 +960,8 @@ function sortedSessions(){
     a.dateStr === b.dateStr ? a.created - b.created : (a.dateStr < b.dateStr ? -1 : 1));
 }
 
-$('btnAddSession').addEventListener('click', ()=>{
-  if(!(img && state === 'done')) return;
+function saveCurrentToVerlauf(){
+  if(!(img && state === 'done')) return null;
   const s = snapshotSession();
   const i = sessions.findIndex(x => x.id === s.id);
   if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
@@ -948,9 +969,23 @@ $('btnAddSession').addEventListener('click', ()=>{
   editingId = s.id;
   delete imgCache[s.id];
   renderSessions(); updateAddBtn();
+  return s;
+}
+$('btnAddSession').addEventListener('click', ()=>{
+  if(!saveCurrentToVerlauf()) return;
   const b = $('btnAddSession');
   b.textContent = '✓ Gesichert'; setTimeout(()=>{ updateAddBtn(); }, 1200);
 });
+$('btnQuickSave').addEventListener('click', ()=>{
+  if(!saveCurrentToVerlauf()) return;
+  const b = $('btnQuickSave');
+  b.textContent = '✓ Gesichert';
+  setTimeout(()=>{ b.textContent = quickSaveLabel(); }, 1200);
+});
+function quickSaveLabel(){
+  return (editingId && sessions.some(x => x.id === editingId))
+    ? '✓ Änderungen sichern' : '✓ Aufnahme in Verlauf sichern';
+}
 
 function renderSessions(){
   const list = sortedSessions();
