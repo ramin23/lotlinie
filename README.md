@@ -6,7 +6,7 @@ und Berichte als PDF drucken. Läuft komplett im Browser – **alle Fotos und
 Daten bleiben auf dem Gerät.**
 
 ## Neu in Version 1.1
-
+ 
 - **Zoom:** zwei Finger zum Zoomen, ein Finger verschiebt den Ausschnitt
   (wenn gezoomt). Reset über den ×-Chip links oben im Bild.
 - **✨ KI-Vorschlag (Beta):** schlägt Startpositionen für die Punkte vor
