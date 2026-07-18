@@ -110,6 +110,13 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 .histfoot{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
 .histfoot .btn{flex:1;min-width:130px}
 
+/* ---------- Vorschau (Untersuchung) ---------- */
+.slides{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;padding-bottom:4px}
+.slide{flex:0 0 100%;scroll-snap-align:center}
+.slide canvas{width:100%;display:block;border-radius:10px;border:1px solid var(--line);background:#0e161d}
+.slide .cap{font-size:12px;text-align:center;margin-top:5px;color:var(--ink2)}
+
 /* ---------- Vergleich ---------- */
 #compareCard{display:none}
 .cmpscroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
@@ -156,9 +163,11 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 <main>
   <!-- Ansicht + Patient -->
   <div class="card">
-    <div class="seg" role="tablist" aria-label="Ansicht">
-      <button id="segLat" class="active" role="tab" aria-selected="true">Seitlich</button>
-      <button id="segFro" role="tab" aria-selected="false">Frontal</button>
+    <div class="seg" role="tablist" aria-label="Ansicht" id="segRow">
+      <button data-view="front" class="active" role="tab" aria-selected="true">Vorne</button>
+      <button data-view="sideR" role="tab" aria-selected="false">Rechts</button>
+      <button data-view="back" role="tab" aria-selected="false">Hinten</button>
+      <button data-view="sideL" role="tab" aria-selected="false">Links</button>
     </div>
     <div class="row" style="margin-top:12px">
       <div class="field">
@@ -174,8 +183,9 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <!-- Leerer Zustand -->
   <div class="card" id="emptyState">
-    <h3>Foto aufnehmen oder auswählen</h3>
-    <p>Ganzkörperaufnahme von Kopf bis Fuß.</p>
+    <button class="btn block" id="btnExam" style="margin-bottom:14px">🩺 Untersuchung starten (4 Ansichten)</button>
+    <h3 id="emptyTitle">Einzelaufnahme: Foto aufnehmen</h3>
+    <p id="emptySub">Ganzkörperaufnahme von Kopf bis Fuß.</p>
     <div class="btnrow">
       <button class="btn" id="btnCam">📷 Foto aufnehmen</button>
       <button class="btn ghost" id="btnGal">Aus Galerie</button>
@@ -205,6 +215,11 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
     <p class="hint" id="guideHint"></p>
     <div class="dots" id="guideDots"></div>
     <p class="hint" id="kiMsg" hidden style="margin:0 0 10px"></p>
+    <div class="row" id="examRow" hidden>
+      <button class="btn small" id="btnExamNext" disabled>Speichern & weiter →</button>
+      <button class="btn ghost small" id="btnExamSkip">Überspringen</button>
+      <button class="btn ghost small" id="btnExamStop">Beenden</button>
+    </div>
     <div class="row">
       <button class="btn small" id="btnKI">✨ Punkte per KI vorschlagen</button>
       <button class="btn ghost small" id="btnUndo">↶ Punkt zurück</button>
@@ -239,19 +254,29 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
     </div>
   </div>
 
+  <!-- Untersuchungs-Vorschau -->
+  <div class="card" id="previewCard" style="display:none">
+    <h2 id="prevTitle">Untersuchung · Vorschau</h2>
+    <div class="slides" id="prevSlides"></div>
+    <div style="font-size:12px;color:var(--ink2);margin-top:6px;text-align:center">← wischen zum Blättern →</div>
+    <button class="btn block" id="btnExamPDF" style="margin-top:12px">PDF erstellen & teilen</button>
+    <button class="btn ghost block" id="btnPrevClose" style="margin-top:8px">Schließen</button>
+  </div>
+
   <!-- Vergleich -->
   <div class="card" id="compareCard">
     <h2 id="cmpTitle">Vergleich</h2>
     <div class="cmpscroll" id="cmpImgs"></div>
     <div class="cmptwrap"><table class="cmptable" id="cmpTable"></table></div>
     <div class="legalline" id="cmpLegal"></div>
-    <button class="btn block" id="btnCmpReport" style="margin-top:12px">Verlaufsbericht drucken / PDF</button>
+    <button class="btn block" id="btnCmpPDF" style="margin-top:12px">Verlaufs-PDF erstellen & teilen</button>
+    <button class="btn ghost block" id="btnCmpReport" style="margin-top:8px">Verlaufsbericht drucken</button>
     <button class="btn ghost block" id="btnCmpClose" style="margin-top:8px">Vergleich schließen</button>
   </div>
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 1.1 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 2.1 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -260,6 +285,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
 <script>
 'use strict';
+const AUTO_KI = !/[?&]noki=1/.test(location.search);   /* ?noki=1 deaktiviert Auto-Vorschläge */
 /* ============================================================
    Lotlinie – Haltungsanalyse mit Verlaufsvergleich
    Landmarken per geführtem Fingertipp (mit Lupe), Winkel werden
@@ -268,35 +294,36 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
    werden. Alles läuft lokal im Browser.
    ============================================================ */
 
+const SIDE_LM = [
+  {id:'tragus',    name:'Tragus (Ohr)',              short:'Ohr',  hint:'Kleiner Knorpel direkt vor dem Gehörgang.'},
+  {id:'c7',        name:'C7 – Vertebra prominens',   short:'C7',   hint:'Deutlich hervorstehender Wirbel am Übergang Hals / oberer Rücken.'},
+  {id:'acromion',  name:'Acromion (Schulterhöhe)',   short:'Sch',  hint:'Knöcherner Punkt ganz oben auf der Schulter.'},
+  {id:'trochanter',name:'Trochanter major (Hüfte)',  short:'Hüf',  hint:'Seitlicher Knochenvorsprung am oberen Oberschenkel.'},
+  {id:'knee',      name:'Kniegelenk (seitlich)',     short:'Knie', hint:'Seitlicher Gelenkspalt auf Kniemitte.'},
+  {id:'malleolus', name:'Außenknöchel',              short:'Knö',  hint:'Seitlicher Knöchel am Sprunggelenk.'}
+];
+const PAIR_LM = (kopfName, kopfHint, kopfShort) => [
+  {id:'headL', name:kopfName + ' – linke Bildseite',  short:kopfShort, hint:kopfHint},
+  {id:'headR', name:kopfName + ' – rechte Bildseite', short:kopfShort, hint:kopfHint},
+  {id:'shL',  name:'Schulter – linke Bildseite',      short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
+  {id:'shR',  name:'Schulter – rechte Bildseite',     short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
+  {id:'hipL', name:'Beckenkamm – linke Bildseite',    short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+  {id:'hipR', name:'Beckenkamm – rechte Bildseite',   short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+  {id:'ankL', name:'Sprunggelenk – linke Bildseite',  short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'},
+  {id:'ankR', name:'Sprunggelenk – rechte Bildseite', short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'}
+];
 const VIEWS = {
-  lateral: {
-    label: 'Seitlich',
-    landmarks: [
-      {id:'tragus',    name:'Tragus (Ohr)',              short:'Ohr',  hint:'Kleiner Knorpel direkt vor dem Gehörgang.'},
-      {id:'c7',        name:'C7 – Vertebra prominens',   short:'C7',   hint:'Deutlich hervorstehender Wirbel am Übergang Hals / oberer Rücken.'},
-      {id:'acromion',  name:'Acromion (Schulterhöhe)',   short:'Sch',  hint:'Knöcherner Punkt ganz oben auf der Schulter.'},
-      {id:'trochanter',name:'Trochanter major (Hüfte)',  short:'Hüf',  hint:'Seitlicher Knochenvorsprung am oberen Oberschenkel.'},
-      {id:'knee',      name:'Kniegelenk (seitlich)',     short:'Knie', hint:'Seitlicher Gelenkspalt auf Kniemitte.'},
-      {id:'malleolus', name:'Außenknöchel',              short:'Knö',  hint:'Seitlicher Knöchel am Sprunggelenk.'}
-    ]
-  },
-  frontal: {
-    label: 'Frontal',
-    landmarks: [
-      {id:'eyeL', name:'Auge – linke Bildseite',         short:'Au',  hint:'Mitte der Pupille.'},
-      {id:'eyeR', name:'Auge – rechte Bildseite',        short:'Au',  hint:'Mitte der Pupille.'},
-      {id:'shL',  name:'Schulter – linke Bildseite',     short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
-      {id:'shR',  name:'Schulter – rechte Bildseite',    short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
-      {id:'hipL', name:'Beckenkamm – linke Bildseite',   short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
-      {id:'hipR', name:'Beckenkamm – rechte Bildseite',  short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
-      {id:'ankL', name:'Sprunggelenk – linke Bildseite', short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'},
-      {id:'ankR', name:'Sprunggelenk – rechte Bildseite',short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'}
-    ]
-  }
+  front: {label:'Vorne',           family:'pairs', headKp:'eye', landmarks:PAIR_LM('Auge','Mitte der Pupille.','Au')},
+  sideR: {label:'Rechts seitlich', family:'side',  landmarks:SIDE_LM},
+  back:  {label:'Hinten',          family:'pairs', headKp:'ear', landmarks:PAIR_LM('Ohr','Mitte des Ohrs (Ansatz).','Ohr')},
+  sideL: {label:'Links seitlich',  family:'side',  landmarks:SIDE_LM}
 };
+const LEGACY_VIEW = {lateral:'sideR', frontal:'front'};
+const EXAM_ORDER = ['front','sideR','back','sideL'];
 
 /* ---------- Zustand ---------- */
-let view = 'lateral';
+let view = 'front';
+let exam = null;   /* aktive Untersuchung: {idx, ids:{viewKey:sessionId}} */
 let img = null, iw = 0, ih = 0;      // aktuelles Editor-Bild
 let pts = {};                        // id -> {x,y} in Bildkoordinaten
 let state = 'empty';                 // empty | placing | done
@@ -360,7 +387,8 @@ const stWord = {ok:'im Richtbereich', warn:'leicht auffällig', alert:'auffälli
 
 function computeMetricsFor(v, p){
   const out = [];
-  if(v === 'lateral'){
+  const fam = VIEWS[v].family;
+  if(fam === 'side'){
     const facing = (p.tragus && p.c7) ? (Math.sign(p.tragus.x - p.c7.x) || 1) : 1;
 
     out.push(metricFor(p, 'CVA · Kopfhaltung', 'Richtwert ≥ 50° (kleiner = Kopfvorhaltung)', 'higher',
@@ -403,14 +431,15 @@ function computeMetricsFor(v, p){
       }));
 
   } else {
+    const kopf = VIEWS[v].headKp === 'ear' ? 'Ohrlinie' : 'Augenlinie';
     const tilt = (a, b)=>{
       const ang = deg(Math.atan2(p[b].y - p[a].y, p[b].x - p[a].x));
       const mag = Math.abs(ang);
       const side = ang > 0.05 ? 'links höher' : ang < -0.05 ? 'rechts höher' : 'waagrecht';
       return {mag, side};
     };
-    out.push(metricFor(p, 'Kopfneigung', 'Richtwert 0° ± 3° (Augenlinie)', 'lower0',
-      ['eyeL','eyeR'], ()=>{ const t = tilt('eyeL','eyeR');
+    out.push(metricFor(p, 'Kopfneigung', `Richtwert 0° ± 3° (${kopf})`, 'lower0',
+      ['headL','headR'], ()=>{ const t = tilt('headL','headR');
         return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 3, 5)}; }));
     out.push(metricFor(p, 'Schulterlinie', 'Richtwert 0° ± 2°', 'lower0',
       ['shL','shR'], ()=>{ const t = tilt('shL','shR');
@@ -419,8 +448,8 @@ function computeMetricsFor(v, p){
       ['hipL','hipR'], ()=>{ const t = tilt('hipL','hipR');
         return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 2, 4)}; }));
     out.push(metricFor(p, 'Mittellinie', 'Richtwert 0° ± 2° (Sprunggelenke → Kopf)', 'lower0',
-      ['eyeL','eyeR','ankL','ankR'], ()=>{
-        const mE = {x:(p.eyeL.x+p.eyeR.x)/2, y:(p.eyeL.y+p.eyeR.y)/2};
+      ['headL','headR','ankL','ankR'], ()=>{
+        const mE = {x:(p.headL.x+p.headR.x)/2, y:(p.headL.y+p.headR.y)/2};
         const mA = {x:(p.ankL.x+p.ankR.x)/2, y:(p.ankL.y+p.ankR.y)/2};
         const a = deg(Math.atan2(mE.x - mA.x, mA.y - mE.y));
         const mag = Math.abs(a);
@@ -450,7 +479,7 @@ function deltaInfo(cmp, oldV, newV){
 /* ============================================================
    Zeichnen – wiederverwendbar für Editor, Vergleich und Bericht
    ============================================================ */
-function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0){
+function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null){
   const s = (cssW / srcW) * zz;
   c2.clearRect(0, 0, cssW, cssH);
   c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
@@ -459,19 +488,22 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
   const P = id => p[id] ? {x: p[id].x*s + ox, y: p[id].y*s + oy} : null;
   const seg = (a, b, color, width, dash)=>{
     if(!a || !b) return;
-    c2.strokeStyle = color; c2.lineWidth = width;
+    /* weißer Halo darunter -> Linie bleibt auf jedem Foto deutlich sichtbar */
     c2.setLineDash(dash || []);
+    c2.strokeStyle = 'rgba(255,255,255,.9)'; c2.lineWidth = width + 3;
+    c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
+    c2.strokeStyle = color; c2.lineWidth = width;
     c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
     c2.setLineDash([]);
   };
-  const plumbAt = x => seg({x, y:0}, {x, y:cssH}, '#E4573D', 2, [7,6]);
-  const inkLine = 'rgba(21,36,48,.55)';
+  const IST = '#0D9488';                                      /* Ist-Linien: kräftiges Türkis */
+  const plumbAt = x => seg({x, y:0}, {x, y:cssH}, '#E0301E', 2.5, [9,7]);   /* Soll: rot gestrichelt */
 
-  if(v === 'lateral'){
+  if(VIEWS[v].family === 'side'){
     const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), c=P('c7'), tr=P('tragus');
     if(m) plumbAt(m.x);
-    seg(m,k, inkLine, 2); seg(k,t, inkLine, 2); seg(t,a, inkLine, 2);
-    seg(c,tr, '#C77E14', 2.5);
+    seg(m,k, IST, 3.5); seg(k,t, IST, 3.5); seg(t,a, IST, 3.5);
+    seg(c,tr, '#C77E14', 3.5);
     if(c && tr){
       const facing = Math.sign((p.tragus.x - p.c7.x)) || 1;
       seg(c, {x: c.x + 58*facing, y: c.y}, '#C77E14', 1.5, [4,4]);
@@ -484,24 +516,26 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
       c2.beginPath(); c2.arc(c.x, c.y, 30, a0, a1, diff < 0); c2.stroke();
     }
   } else {
-    const eL=P('eyeL'), eR=P('eyeR'), sL=P('shL'), sR=P('shR'),
-          hL=P('hipL'), hR=P('hipR'), aL=P('ankL'), aR=P('ankR');
-    seg(eL,eR, '#C77E14', 2.5);
-    seg(sL,sR, '#C77E14', 2.5);
-    seg(hL,hR, '#C77E14', 2.5);
+    const hL=P('headL'), hR=P('headR'), sL=P('shL'), sR=P('shR'),
+          bL=P('hipL'), bR=P('hipR'), aL=P('ankL'), aR=P('ankR');
     if(aL && aR){
-      seg(aL,aR, inkLine, 2);
       const mid = {x:(aL.x+aR.x)/2, y:(aL.y+aR.y)/2};
       plumbAt(mid.x);
-      if(eL && eR) seg(mid, {x:(eL.x+eR.x)/2, y:(eL.y+eR.y)/2}, '#0F766E', 2, [5,5]);
+      if(hL && hR) seg(mid, {x:(hL.x+hR.x)/2, y:(hL.y+hR.y)/2}, IST, 2.5);
+      seg(aL,aR, IST, 3);
     }
+    seg(hL,hR, IST, 3.5);
+    seg(sL,sR, IST, 3.5);
+    seg(bL,bR, IST, 3.5);
   }
 
+  /* Punkte */
   for(const l of VIEWS[v].landmarks){
     const q = P(l.id);
     if(!q) continue;
-    c2.beginPath(); c2.arc(q.x, q.y, 7, 0, 7); c2.fillStyle = '#fff'; c2.fill();
-    c2.beginPath(); c2.arc(q.x, q.y, 4.4, 0, 7); c2.fillStyle = '#0F766E'; c2.fill();
+    c2.beginPath(); c2.arc(q.x, q.y, 7.5, 0, 7); c2.fillStyle = '#fff'; c2.fill();
+    c2.beginPath(); c2.arc(q.x, q.y, 5, 0, 7); c2.fillStyle = '#0D9488'; c2.fill();
+    if(!showLabels) continue;
     c2.font = '600 10px "IBM Plex Mono", monospace';
     const tw = c2.measureText(l.short).width;
     let lx = q.x + 11, ly = q.y - 18;
@@ -513,9 +547,35 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
     c2.fillStyle = '#152430';
     c2.fillText(l.short, lx+5, ly+11.5);
   }
+
+  /* Mini-Legende unten links: Soll vs. Ist */
+  const ly0 = cssH - 22;
+  c2.fillStyle = 'rgba(255,255,255,.88)';
+  if(c2.roundRect){ c2.beginPath(); c2.roundRect(8, ly0 - 6, 168, 22, 6); c2.fill(); }
+  else c2.fillRect(8, ly0 - 6, 168, 22);
+  c2.strokeStyle = '#E0301E'; c2.lineWidth = 2.5; c2.setLineDash([6,5]);
+  c2.beginPath(); c2.moveTo(16, ly0+5); c2.lineTo(44, ly0+5); c2.stroke(); c2.setLineDash([]);
+  c2.strokeStyle = IST; c2.lineWidth = 3.5;
+  c2.beginPath(); c2.moveTo(96, ly0+5); c2.lineTo(124, ly0+5); c2.stroke();
+  c2.fillStyle = '#152430'; c2.font = '600 10px "IBM Plex Mono", monospace';
+  c2.fillText('Soll', 48, ly0 + 8.5);
+  c2.fillText('Ist', 128, ly0 + 8.5);
+
+  /* Datumsstempel oben rechts – wandert mit dem Bild in jede Vorschau und jedes PDF */
+  if(dateLabel){
+    c2.font = '600 11px "IBM Plex Mono", monospace';
+    const tw = c2.measureText(dateLabel).width;
+    const bx = cssW - tw - 22, by = 8;
+    c2.fillStyle = 'rgba(255,255,255,.92)';
+    if(c2.roundRect){ c2.beginPath(); c2.roundRect(bx, by, tw + 14, 20, 6); c2.fill(); }
+    else c2.fillRect(bx, by, tw + 14, 20);
+    c2.fillStyle = '#152430';
+    c2.fillText(dateLabel, bx + 7, by + 14);
+  }
 }
 
 /* ============================================================
+   Editor: Bild laden/* ============================================================
    Editor: Bild laden, platzieren, Lupe
    ============================================================ */
 let lastObjURL = null;
@@ -542,6 +602,8 @@ async function loadFile(file){
   $('guideBar').style.display = 'block';
   $('resultsCard').style.display = 'block';
   render(); updateGuide(); updateMetrics();
+  prewarmKI();
+  if(AUTO_KI) runKI();      /* Punkte direkt vorschlagen – nur noch korrigieren */
 }
 $('btnCam').addEventListener('click', ()=> $('fileCam').click());
 $('btnGal').addEventListener('click', ()=> $('fileGal').click());
@@ -550,14 +612,15 @@ $('fileGal').addEventListener('change', e => { loadFile(e.target.files[0]); e.ta
 $('btnReplace').addEventListener('click', ()=> $('fileGal').click());
 
 function setView(v, silent){
-  if(v === view) return;
+  if(!VIEWS[v] || v === view) return;
   if(!silent && Object.keys(pts).length &&
      !confirm('Ansicht wechseln? Die gesetzten Punkte werden entfernt.')) return;
   view = v;
-  $('segLat').classList.toggle('active', v==='lateral');
-  $('segFro').classList.toggle('active', v==='frontal');
-  $('segLat').setAttribute('aria-selected', v==='lateral');
-  $('segFro').setAttribute('aria-selected', v==='frontal');
+  for(const b of document.querySelectorAll('#segRow button')){
+    const on = b.dataset.view === v;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on);
+  }
   if(!silent){
     pts = {}; placeOrder = []; editingId = null;
     z = 1; tx = 0; ty = 0; kiMsgHide(); updateZoomChip();
@@ -565,8 +628,12 @@ function setView(v, silent){
     updateGuide(); updateMetrics();
   }
 }
-$('segLat').addEventListener('click', ()=> setView('lateral'));
-$('segFro').addEventListener('click', ()=> setView('frontal'));
+document.querySelectorAll('#segRow button').forEach(b => {
+  b.addEventListener('click', ()=>{
+    if(exam){ alert('Während einer Untersuchung wechselt die Ansicht automatisch.'); return; }
+    setView(b.dataset.view);
+  });
+});
 
 function layout(){
   const cssW0 = wrap.clientWidth;
@@ -607,7 +674,7 @@ function render(){
   const {w, h, dpr} = layout();
   clampPan(w, h);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty);
+  paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty, state !== 'done', fmtDate($('sessDate').value || todayISO()));
 }
 
 /* ---------- Lupe ---------- */
@@ -771,7 +838,7 @@ function updateGuide(){
   }
   $('btnUndo').disabled = placeOrder.length === 0;
   $('btnKI').hidden = !(img && state === 'placing' && placedCount() === 0);
-  updateAddBtn();
+  updateAddBtn(); updateExamUI();
 }
 $('btnUndo').addEventListener('click', ()=>{
   const id = placeOrder.pop();
@@ -800,13 +867,15 @@ function updateMetrics(){
       </div>
     </div>`).join('');
   $('btnReport').disabled = !currentMetrics.some(m => m.available);
-  $('legalLine').textContent = (view === 'frontal'
+  $('legalLine').textContent = (VIEWS[view].family === 'pairs'
     ? 'Seitenangaben beziehen sich auf die Bildansicht. ' : '')
-    + 'Richtwerte dienen der Orientierung. Dokumentationshilfe – keine medizinische Diagnose.';
+    + 'Rot gestrichelt = Soll (Lot) · Türkis = Ist. Richtwerte dienen der Orientierung. Dokumentationshilfe – keine medizinische Diagnose.';
   updateAddBtn();
 }
 function updateAddBtn(){
   const b = $('btnAddSession');
+  b.style.display = exam ? 'none' : '';
+  $('btnReport').style.display = exam ? 'none' : '';
   b.disabled = !(img && state === 'done');
   b.textContent = (editingId && sessions.some(s=>s.id===editingId))
     ? 'Änderungen in Verlaufsliste übernehmen'
@@ -967,6 +1036,11 @@ $('fileImport').addEventListener('change', async e => {
       const data = JSON.parse(await f.text());
       const arr = Array.isArray(data.sessions) ? data.sessions : [data];
       for(const s of arr){
+        if(s && s.view && LEGACY_VIEW[s.view]){
+          s.view = LEGACY_VIEW[s.view];
+          if(s.pts){ for(const [o,n] of [['eyeL','headL'],['eyeR','headR']])
+            if(s.pts[o]){ s.pts[n] = s.pts[o]; delete s.pts[o]; } }
+        }
         if(s && typeof s.imgData === 'string' && s.imgData.startsWith('data:image')
            && s.pts && VIEWS[s.view] && s.iw > 0 && s.ih > 0){
           if(!s.id) s.id = 's' + Date.now() + Math.random().toString(36).slice(2,6);
@@ -1028,13 +1102,13 @@ $('btnCompare').addEventListener('click', async ()=>{
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr,0,0,dpr,0,0);
-    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr));
   }));
 
   /* Tabelle */
   buildCompareTable(sel, v, $('cmpTable'), false);
   $('cmpLegal').textContent = 'Veränderung: älteste → neueste Aufnahme. '
-    + (v === 'frontal' ? 'Seitenangaben aus Bildsicht. ' : '')
+    + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '')
     + 'Richtwerte dienen der Orientierung. Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus.';
   $('compareCard').style.display = 'block';
   $('compareCard').scrollIntoView({behavior:'smooth', block:'start'});
@@ -1071,7 +1145,7 @@ $('btnCmpClose').addEventListener('click', ()=>{
 $('btnReport').addEventListener('click', ()=>{
   const rw = Math.min(900, iw), rh = Math.round(rw * ih / iw);
   const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh);
+  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh, 1, 0, 0, false, fmtDate($('sessDate').value || todayISO()));
   const shot = oc.toDataURL('image/jpeg', 0.92);
   const name = $('patient').value.trim() || '—';
   const notes = $('notes').value.trim();
@@ -1096,7 +1170,7 @@ $('btnReport').addEventListener('click', ()=>{
     ${notes ? `<p><b>Notizen:</b> ${esc(notes)}</p>` : ''}
     <div class="sig">Datum, Unterschrift</div>
     <div class="disc">Interne Dokumentationshilfe. Richtwerte dienen der Orientierung und ersetzen keine
-    klinische Beurteilung oder Diagnostik. ${view==='frontal' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
+    klinische Beurteilung oder Diagnostik. ${VIEWS[view].family==='pairs' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
   window.print();
 });
 
@@ -1112,7 +1186,7 @@ $('btnCmpReport').addEventListener('click', async ()=>{
     const w = Math.min(900, s.iw);
     const h = Math.round(w * s.ih / s.iw);
     const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
-    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h);
+    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h, 1, 0, 0, false, fmtDate(s.dateStr));
     return oc.toDataURL('image/jpeg', 0.9);
   }));
   const perRow = Math.min(sel.length, 3);
@@ -1144,7 +1218,7 @@ $('btnCmpReport').addEventListener('click', async ()=>{
     <div class="sig">Datum, Unterschrift</div>
     <div class="disc">Interne Dokumentationshilfe. Veränderung bezieht sich auf älteste → neueste Aufnahme.
     Vergleichbarkeit setzt ähnliche Aufnahmeposition und -entfernung voraus. Richtwerte dienen der Orientierung
-    und ersetzen keine klinische Beurteilung oder Diagnostik. ${v==='frontal' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
+    und ersetzen keine klinische Beurteilung oder Diagnostik. ${VIEWS[v].family==='pairs' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
   window.print();
 });
 
@@ -1157,7 +1231,7 @@ $('btnCmpReport').addEventListener('click', async ()=>{
 function kiMsgShow(t){ const m = $('kiMsg'); m.textContent = t; m.hidden = false; }
 function kiMsgHide(){ $('kiMsg').hidden = true; }
 
-let kiDetector = null;
+let kiPromise = null;
 function loadScript(srcUrl){
   return new Promise((res, rej)=>{
     const s = document.createElement('script');
@@ -1165,26 +1239,76 @@ function loadScript(srcUrl){
     document.head.appendChild(s);
   });
 }
-async function ensureDetector(){
-  if(kiDetector) return kiDetector;
-  if(!window.tf) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
-  if(!window.poseDetection) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
-  kiDetector = await poseDetection.createDetector(
-    poseDetection.SupportedModels.MoveNet,
-    {modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER});
-  return kiDetector;
+function ensureDetector(){
+  if(kiPromise) return kiPromise;
+  kiPromise = (async ()=>{
+    if(!window.tf) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
+    if(!window.poseDetection) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+    const det = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER});
+    try{  /* Aufwärmen: kompiliert die Grafik-Shader schon jetzt */
+      const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+      await det.estimatePoses(c);
+    }catch(_){}
+    return det;
+  })();
+  kiPromise.catch(()=>{ kiPromise = null; });  /* Fehler -> nächster Versuch erlaubt */
+  return kiPromise;
+}
+function prewarmKI(){
+  if(navigator.connection && navigator.connection.saveData) return;  /* Datensparmodus respektieren */
+  ensureDetector().catch(()=>{});
+}
+/* Zwei-Pass-Erkennung: 1) grob im Gesamtbild, 2) präzise im Personen-Ausschnitt */
+async function kiKeypoints(det){
+  const inp = kiInput();
+  const p1 = await det.estimatePoses(inp.src);
+  const kp = {};
+  if(p1[0]) for(const k of p1[0].keypoints)
+    kp[k.name] = {x: k.x / inp.k, y: k.y / inp.k, score: k.score};
+
+  const good = Object.values(kp).filter(k => k.score >= 0.2);
+  if(good.length < 4) return kp;                     /* zu unsicher für Zuschnitt */
+  let x0 = Math.min(...good.map(k=>k.x)), x1 = Math.max(...good.map(k=>k.x));
+  let y0 = Math.min(...good.map(k=>k.y)), y1 = Math.max(...good.map(k=>k.y));
+  const mx = (x1-x0)*0.30 + 12, my = (y1-y0)*0.10 + 12;
+  x0 = Math.max(0, x0-mx); x1 = Math.min(iw, x1+mx);
+  y0 = Math.max(0, y0-my); y1 = Math.min(ih, y1+my);
+  const bw = x1-x0, bh = y1-y0;
+  if(bw < 40 || bh < 80) return kp;
+
+  const maxE = 640, k2 = Math.min(1, maxE / Math.max(bw, bh));
+  const cw = Math.round(bw*k2), ch = Math.round(bh*k2);
+  const oc = document.createElement('canvas'); oc.width = cw; oc.height = ch;
+  oc.getContext('2d').drawImage(img, x0, y0, bw, bh, 0, 0, cw, ch);
+  const p2 = await det.estimatePoses(oc);
+  if(p2[0]) for(const k of p2[0].keypoints){
+    if(k.score >= 0.25) kp[k.name] = {x: x0 + k.x/k2, y: y0 + k.y/k2, score: k.score};
+  }
+  return kp;
 }
 
-$('btnKI').addEventListener('click', async ()=>{
+/* Eingabebild fürs Modell verkleinern: spart auf 12-MP-Fotos Sekunden */
+function kiInput(){
+  const maxE = 512;
+  const k = Math.min(1, maxE / Math.max(iw, ih));
+  if(k >= 1) return {src: img, k: 1};
+  const w = Math.round(iw*k), h = Math.round(ih*k);
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+  oc.getContext('2d').drawImage(img, 0, 0, w, h);
+  return {src: oc, k};
+}
+
+async function runKI(){
+  if(!img || state !== 'placing' || placedCount() > 0) return;
   const btn = $('btnKI');
   btn.disabled = true;
   try{
     btn.textContent = 'KI-Modell lädt … (einmalig ~7 MB)';
     const det = await ensureDetector();
     btn.textContent = 'Analysiere Foto …';
-    const poses = await det.estimatePoses(img);
-    const kp = {};
-    if(poses[0]) for(const k of poses[0].keypoints) kp[k.name] = k;
+    const kp = await kiKeypoints(det);
     const MIN = 0.25;
     const get = n => (kp[n] && kp[n].score >= MIN) ? {x: kp[n].x, y: kp[n].y} : null;
     const best = (a, b)=>{
@@ -1197,7 +1321,7 @@ $('btnKI').addEventListener('click', async ()=>{
       placeOrder.push(id); return true; } return false; };
     let set = 0; const est = [];
 
-    if(view === 'lateral'){
+    if(VIEWS[view].family === 'side'){
       const ear = best('left_ear','right_ear'), sh = best('left_shoulder','right_shoulder'),
             hip = best('left_hip','right_hip'), kn = best('left_knee','right_knee'),
             an  = best('left_ankle','right_ankle');
@@ -1218,7 +1342,9 @@ $('btnKI').addEventListener('click', async ()=>{
         if(put(idR, {x: R.x, y: R.y - (lift||0)})) set++;
         return {L, R};
       };
-      pair('left_eye','right_eye','eyeL','eyeR', 0);
+      const headPair = VIEWS[view].headKp === 'ear'
+        ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
+      pair(headPair[0], headPair[1], 'headL', 'headR', 0);
       const sh = pair('left_shoulder','right_shoulder','shL','shR', 0);
       const hipL = get('left_hip'), hipR = get('right_hip');
       if(sh && hipL && hipR){
@@ -1245,10 +1371,283 @@ $('btnKI').addEventListener('click', async ()=>{
     btn.disabled = false;
     btn.textContent = '✨ Punkte per KI vorschlagen';
   }
+}
+$('btnKI').addEventListener('click', runKI);
+
+/* ============================================================
+   Untersuchung: 4 Ansichten geführt (vorne -> rechts -> hinten -> links)
+   ============================================================ */
+let previewIds = [];
+
+function updateExamUI(){
+  const on = !!exam;
+  $('btnExam').hidden = on;
+  $('examRow').hidden = !on;
+  if(on) $('btnExamNext').disabled = !(img && state === 'done');
+  if(on && !img){
+    $('emptyTitle').textContent = `Ansicht ${exam.idx+1} von 4 · ${VIEWS[EXAM_ORDER[exam.idx]].label}`;
+    $('emptySub').textContent = 'Foto aufnehmen oder auswählen – die KI setzt die Punkte vor, du korrigierst nur.';
+  } else if(!on){
+    $('emptyTitle').textContent = 'Einzelaufnahme: Foto aufnehmen';
+    $('emptySub').textContent = 'Ganzkörperaufnahme von Kopf bis Fuß.';
+  }
+}
+
+function resetToEmpty(){
+  img = null; pts = {}; placeOrder = []; state = 'empty';
+  z = 1; tx = 0; ty = 0; kiMsgHide(); updateZoomChip();
+  wrap.style.display = 'none';
+  $('guideBar').style.display = 'none';
+  $('resultsCard').style.display = 'none';
+  $('emptyState').style.display = 'block';
+}
+
+$('btnExam').addEventListener('click', ()=>{
+  exam = {idx: 0, ids: {}};
+  editingId = null;
+  $('previewCard').style.display = 'none';
+  resetToEmpty();
+  setView(EXAM_ORDER[0], true);
+  updateExamUI(); updateGuide(); updateMetrics();
+});
+
+function examAdvance(save){
+  if(save){
+    if(!(img && state === 'done')) return;
+    const s = snapshotSession();
+    const i = sessions.findIndex(x => x.id === s.id);
+    if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
+    else sessions.push(s);
+    exam.ids[view] = s.id;
+    editingId = null;
+    renderSessions();
+  }
+  exam.idx++;
+  if(exam.idx >= EXAM_ORDER.length){
+    const ids = EXAM_ORDER.map(v => exam.ids[v]).filter(Boolean);
+    exam = null;
+    resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
+    if(ids.length) buildPreview(ids);
+    else alert('Keine Ansichten gespeichert.');
+    return;
+  }
+  resetToEmpty();
+  setView(EXAM_ORDER[exam.idx], true);
+  updateExamUI(); updateGuide(); updateMetrics();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+$('btnExamNext').addEventListener('click', ()=> examAdvance(true));
+$('btnExamSkip').addEventListener('click', ()=> examAdvance(false));
+$('btnExamStop').addEventListener('click', ()=>{
+  if(!confirm('Untersuchung beenden? Bereits gespeicherte Ansichten bleiben im Verlauf.')) return;
+  exam = null;
+  resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
+});
+
+async function buildPreview(ids){
+  previewIds = ids;
+  const box = $('prevSlides');
+  box.innerHTML = '';
+  const sel = ids.map(id => sessions.find(x => x.id === id)).filter(Boolean);
+  $('prevTitle').textContent = `Untersuchung · ${fmtDate(sel[0] ? sel[0].dateStr : todayISO())} · ${sel.length} Ansicht${sel.length===1?'':'en'}`;
+  for(const s of sel){
+    const div = document.createElement('div'); div.className = 'slide';
+    const cv = document.createElement('canvas'); div.appendChild(cv);
+    const cap = document.createElement('div'); cap.className = 'cap mono';
+    cap.textContent = VIEWS[s.view].label; div.appendChild(cap);
+    box.appendChild(div);
+  }
+  $('previewCard').style.display = 'block';
+  const cssW = box.clientWidth || 340;
+  const dpr = window.devicePixelRatio || 1;
+  await Promise.all(sel.map(async (s, i)=>{
+    const im = await ensureImg(s);
+    const cv = box.children[i].querySelector('canvas');
+    const cssH = Math.round(cssW * s.ih / s.iw);
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+    cv.style.height = cssH + 'px';
+    const c2 = cv.getContext('2d');
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr));
+  }));
+  $('previewCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+$('btnPrevClose').addEventListener('click', ()=>{ $('previewCard').style.display = 'none'; });
+
+async function shareOrDownloadBlob(blob, name, mime){
+  try{
+    const file = new File([blob], name, {type: mime});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      await navigator.share({files:[file], title: name});
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- PDF mit Kurzauswertung, teilbar ---------- */
+let pdfLibPromise = null;
+function ensurePDFLib(){
+  if(window.jspdf) return Promise.resolve();
+  if(!pdfLibPromise){
+    pdfLibPromise = loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      .catch(e => { pdfLibPromise = null; throw e; });
+  }
+  return pdfLibPromise;
+}
+function shortEval(s){
+  const ms = computeMetricsFor(s.view, s.pts).filter(m => m.available);
+  if(!ms.length) return VIEWS[s.view].label + ': keine Messwerte.';
+  const bad = ms.filter(m => m.st !== 'ok');
+  if(!bad.length) return VIEWS[s.view].label + ': unauffällig.';
+  return VIEWS[s.view].label + ': '
+    + bad.map(m => `${m.name.split(' ·')[0]} ${m.txt} – ${m.sub}`).join('; ') + '.';
+}
+
+$('btnExamPDF').addEventListener('click', async ()=>{
+  const btn = $('btnExamPDF');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try{
+    btn.textContent = 'PDF wird erstellt …';
+    await ensurePDFLib();
+    const sel = previewIds.map(id => sessions.find(x => x.id === id)).filter(Boolean);
+    if(!sel.length) return;
+    const {jsPDF} = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    const W = 210, M = 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('LOT | LINIE  ·  HALTUNGSANALYSE', M, 18);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70);
+    const pat = sel[0].patient || '—';
+    doc.text(`Patient·in: ${pat}     Datum: ${fmtDate(sel[0].dateStr)}     Erstellt: ${fmtDate(todayISO())}, ${nowTime()} Uhr`, M, 24);
+    doc.setTextColor(0);
+
+    const n = sel.length, gap = 4;
+    const cellW = (W - 2*M - (n-1)*gap) / n;
+    const imgTop = 30, maxH = 92;
+    let x = M;
+    for(const s of sel){
+      const im = await ensureImg(s);
+      const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
+      const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr));
+      const data = oc.toDataURL('image/jpeg', 0.88);
+      let h = maxH, w = h * s.iw / s.ih;
+      if(w > cellW){ w = cellW; h = w * s.ih / s.iw; }
+      doc.addImage(data, 'JPEG', x + (cellW - w)/2, imgTop + (maxH - h)/2, w, h);
+      doc.setFontSize(8); doc.setTextColor(90);
+      doc.text(VIEWS[s.view].label, x + cellW/2, imgTop + maxH + 4, {align:'center'});
+      x += cellW + gap;
+    }
+
+    let y = imgTop + maxH + 13;
+    doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Kurzauswertung', M, y); y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    for(const s of sel){
+      const lines = doc.splitTextToSize('•  ' + shortEval(s), W - 2*M);
+      doc.text(lines, M, y);
+      y += lines.length * 4.6 + 1.5;
+    }
+    y += 3;
+    const anyBad = sel.some(s => computeMetricsFor(s.view, s.pts).some(m => m.available && m.st !== 'ok'));
+    doc.setFont('helvetica','bold');
+    doc.text(anyBad
+      ? 'Gesamteindruck: einzelne auffällige Werte (siehe oben) – Verlauf beobachten.'
+      : 'Gesamteindruck: insgesamt unauffällig.', M, y);
+
+    doc.setDrawColor(60); doc.line(M, 270, M + 60, 270);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(60);
+    doc.text('Datum, Unterschrift', M, 274);
+    doc.setFontSize(7.5); doc.setTextColor(110);
+    doc.text(doc.splitTextToSize('Interne Dokumentationshilfe. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung oder Diagnostik. Seitenangaben aus Bildsicht. Rot gestrichelt = Soll (Lot), Türkis = Ist. Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+
+    const name = `lotlinie_${safeName(pat)}_${sel[0].dateStr}.pdf`;
+    await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
+  }catch(err){
+    alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
+  }finally{
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+/* Verlaufs-PDF: gleiche Ansicht, mehrere Daten nebeneinander, teilbar */
+$('btnCmpPDF').addEventListener('click', async ()=>{
+  if(cmpSel.length < 2) return;
+  const btn = $('btnCmpPDF');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try{
+    btn.textContent = 'PDF wird erstellt …';
+    await ensurePDFLib();
+    const sel = cmpSel, v = sel[0].view;
+    const {jsPDF} = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    const W = 210, M = 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('LOT | LINIE  ·  VERLAUFSVERGLEICH', M, 18);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70);
+    const pat = [...new Set(sel.map(s => s.patient || '—'))].join(', ');
+    doc.text(`Patient·in: ${pat}     Ansicht: ${VIEWS[v].label}     Zeitraum: ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}`, M, 24);
+    doc.setTextColor(0);
+
+    const n = sel.length, gap = 4;
+    const cellW = (W - 2*M - (n-1)*gap) / n;
+    const imgTop = 30, maxH = 104;
+    let x = M;
+    for(const s of sel){
+      const im = await ensureImg(s);
+      const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
+      const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr));
+      const data = oc.toDataURL('image/jpeg', 0.88);
+      let h = maxH, w = h * s.iw / s.ih;
+      if(w > cellW){ w = cellW; h = w * s.ih / s.iw; }
+      doc.addImage(data, 'JPEG', x + (cellW - w)/2, imgTop + (maxH - h)/2, w, h);
+      doc.setFontSize(8); doc.setTextColor(90);
+      doc.text(fmtDate(s.dateStr), x + cellW/2, imgTop + maxH + 4, {align:'center'});
+      x += cellW + gap;
+    }
+
+    let y = imgTop + maxH + 13;
+    doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Veränderung (von ältester zu neuester Aufnahme)', M, y); y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    const per = sel.map(s => computeMetricsFor(s.view, s.pts));
+    per[0].forEach((m0, mi)=>{
+      const a = per[0][mi], b = per[per.length - 1][mi];
+      let line;
+      if(a.available && b.available){
+        const d = deltaInfo(m0.cmp, a.val, b.val);
+        line = `•  ${m0.name}: ${a.txt}  »  ${b.txt}    (${d.txt} · ${d.word})`;
+      } else {
+        line = `•  ${m0.name}: nicht in beiden Aufnahmen erfasst`;
+      }
+      const ls = doc.splitTextToSize(line, W - 2*M);
+      doc.text(ls, M, y);
+      y += ls.length * 4.8 + 1.2;
+    });
+
+    doc.setDrawColor(60); doc.line(M, 270, M + 60, 270);
+    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, 274);
+    doc.setFontSize(7.5); doc.setTextColor(110);
+    doc.text(doc.splitTextToSize('Interne Dokumentationshilfe. Veränderung bezieht sich auf älteste → neueste Aufnahme; Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung oder Diagnostik. ' + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '') + 'Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+
+    const name = `lotlinie_vergleich_${safeName(pat)}_${safeName(VIEWS[v].label)}.pdf`;
+    await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
+  }catch(err){
+    alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
+  }finally{
+    btn.disabled = false; btn.textContent = orig;
+  }
 });
 
 /* Debug-Schnittstelle für automatisierte Tests */
-window.__lot = { get: ()=>({z, tx, ty, state, gesture,
+window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null,
   placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
 
 /* ---------- Sonstiges ---------- */
