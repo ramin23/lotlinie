@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lotlinie">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0F766E">
+<title>Lotlinie · Haltungsanalyse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --mist:#EDF1EF; --card:#FFFFFF; --ink:#152430; --ink2:rgba(21,36,48,.62);
+  --line:#D9E0DD; --petrol:#0F766E; --petrol-d:#0B5D57; --petrol-t:rgba(15,118,110,.08);
+  --plumb:#D9432E; --ok:#157A55; --warn:#A9700F; --alert:#B23A32; --r:12px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:'Archivo',system-ui,-apple-system,sans-serif;background:var(--mist);color:var(--ink);
+  -webkit-tap-highlight-color:transparent;font-size:15px;line-height:1.45}
+.mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace}
+
+/* ---------- Kopf ---------- */
+header{padding:18px 16px 10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand{font-weight:800;font-stretch:115%;letter-spacing:.14em;font-size:19px;text-transform:uppercase}
+.plumb-sep{display:inline-block;width:0;border-left:2px dashed var(--plumb);height:1em;margin:0 .32em;vertical-align:-.14em}
+.tagline{font-size:12.5px;color:var(--ink2);letter-spacing:.02em}
+
+main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.card h2{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin:0 0 10px;font-weight:700}
+
+/* ---------- Steuerung ---------- */
+.seg{display:flex;background:var(--mist);border:1px solid var(--line);border-radius:999px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;border-radius:999px;padding:9px 0;font:inherit;
+  font-weight:600;color:var(--ink2);cursor:pointer}
+.seg button.active{background:var(--ink);color:#fff}
+.row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.row + .row{margin-top:10px}
+.field{flex:1;display:flex;flex-direction:column;gap:4px;min-width:120px}
+.field label{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2)}
+.field input,.field textarea{border:1px solid var(--line);border-radius:9px;padding:9px 11px;font:inherit;background:#fff;width:100%}
+.field input:focus-visible,.field textarea:focus-visible,button:focus-visible{outline:2px solid var(--petrol);outline-offset:1px}
+.field.narrow{flex:0 0 158px}
+
+.btn{border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:650;cursor:pointer;
+  background:var(--petrol);color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:active{background:var(--petrol-d)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:8px 12px;font-size:13.5px;font-weight:600;border-radius:9px}
+.btn[disabled]{opacity:.45;cursor:default}
+.btn.block{width:100%}
+
+/* ---------- Foto / Canvas ---------- */
+#emptyState{text-align:center;padding:30px 16px}
+#emptyState h3{font-size:16.5px;margin:0 0 6px;font-weight:700}
+#emptyState p{margin:0 0 16px;color:var(--ink2);font-size:13.5px}
+#emptyState .tips{text-align:left;font-size:13px;color:var(--ink2);margin:18px auto 0;max-width:420px;
+  border-top:1px dashed var(--line);padding-top:12px}
+#emptyState .tips b{color:var(--ink)}
+.btnrow{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+#canvasWrap{position:relative;display:none;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);
+  background:#0e161d;touch-action:none}
+#stage{display:block;width:100%;touch-action:none}
+#loupe{position:absolute;width:132px;height:132px;border-radius:50%;border:2.5px solid var(--petrol);
+  box-shadow:0 6px 20px rgba(0,0,0,.35);overflow:hidden;pointer-events:none;display:none;background:#000;z-index:5}
+#loupe canvas{display:block;width:132px;height:132px}
+#zoomChip{position:absolute;top:10px;left:10px;z-index:4;border:0;border-radius:999px;
+  padding:7px 12px;font-size:12px;font-weight:600;background:rgba(21,36,48,.82);color:#fff;cursor:pointer}
+
+#guideBar{display:none;background:var(--petrol-t);border:1px solid rgba(15,118,110,.25)}
+#guideBar .step{font-size:11.5px;letter-spacing:.08em;font-weight:600;color:var(--petrol-d);text-transform:uppercase}
+#guideBar h3{margin:3px 0 2px;font-size:16px}
+#guideBar .hint{font-size:13px;color:var(--ink2);margin:0 0 10px}
+#guideBar .dots{display:flex;gap:5px;margin:10px 0 12px}
+#guideBar .dots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+#guideBar .dots i.on{background:var(--petrol)}
+
+/* ---------- Messwerte ---------- */
+#resultsCard{display:none}
+.metric{display:flex;justify-content:space-between;gap:12px;padding:11px 0 11px 12px;border-left:2px dashed var(--line)}
+.metric + .metric{border-top:1px solid var(--line)}
+.metric .n{font-weight:650;font-size:14.5px}
+.metric .norm{font-size:12px;color:var(--ink2);margin-top:2px}
+.metric .v{font-size:21px;font-weight:600;text-align:right;white-space:nowrap}
+.metric .sub{font-size:11.5px;text-align:right;margin-top:2px;font-weight:600}
+.metric.miss .v{color:var(--ink2);font-weight:400}
+.st-ok{color:var(--ok)} .st-warn{color:var(--warn)} .st-alert{color:var(--alert)} .st-none{color:var(--ink2)}
+.legalline{font-size:11.5px;color:var(--ink2);margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.privacy{font-size:12px;color:var(--ink2);text-align:center;padding:2px 10px 0}
+
+/* ---------- Verlauf ---------- */
+.hist-empty{font-size:13px;color:var(--ink2);padding:6px 0 2px}
+.hist-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hist-row:last-of-type{border-bottom:0}
+.hist-row input[type=checkbox]{width:19px;height:19px;accent-color:var(--petrol);flex:0 0 auto}
+.hist-main{flex:1;min-width:0;cursor:pointer}
+.hist-t{font-weight:650;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.viewtag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;
+  background:var(--petrol-t);color:var(--petrol-d);font-weight:700}
+.hist-sub{font-size:12px;color:var(--ink2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iconbtn{border:1px solid var(--line);background:#fff;border-radius:8px;width:36px;height:36px;font-size:15px;
+  cursor:pointer;flex:0 0 auto}
+.histfoot{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.histfoot .btn{flex:1;min-width:130px}
+
+/* ---------- Vergleich ---------- */
+#compareCard{display:none}
+.cmpscroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+.cmpitem{flex:0 0 auto;width:min(46vw,250px)}
+.cmpitem canvas{width:100%;display:block;border-radius:8px;border:1px solid var(--line);background:#0e161d}
+.cmpcap{font-size:11.5px;text-align:center;margin-top:5px;color:var(--ink2)}
+.cmptwrap{overflow-x:auto;margin-top:12px}
+.cmptable{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.cmptable th,.cmptable td{padding:8px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.cmptable th:first-child,.cmptable td:first-child{text-align:left;font-weight:650;white-space:normal;min-width:110px}
+.cmptable thead th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink2);font-weight:700}
+.cmptable .delta{font-weight:650}
+
+/* ---------- Druckbericht ---------- */
+#report{display:none}
+@media print{
+  body{background:#fff}
+  #app{display:none!important}
+  #report{display:block;font-size:12.5px;color:#152430}
+  #report .rb{font-weight:800;letter-spacing:.14em;font-size:15px;text-transform:uppercase}
+  #report .meta{margin:8px 0 14px;display:flex;gap:24px;flex-wrap:wrap;color:#444}
+  #report img.single{max-width:100%;max-height:112mm;display:block;margin:0 auto 12px;border:1px solid #ccc}
+  #report .cmpimgs{display:flex;gap:3mm;flex-wrap:wrap;margin-bottom:10px}
+  #report .cmpimgs figure{margin:0;text-align:center}
+  #report .cmpimgs img{width:100%;border:1px solid #ccc}
+  #report .cmpimgs figcaption{font-size:10px;color:#555;margin-top:2px}
+  #report table{width:100%;border-collapse:collapse;margin:6px 0 14px}
+  #report th,#report td{border:1px solid #bbb;padding:5px 7px;text-align:left;vertical-align:top}
+  #report th{background:#eee;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  #report .disc{font-size:10.5px;color:#555;border-top:1px solid #bbb;padding-top:8px;margin-top:16px}
+  #report .sig{margin-top:32px;border-top:1px solid #444;width:220px;padding-top:4px;font-size:11px}
+  @page{margin:13mm}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">Lot<span class="plumb-sep"></span>Linie</div>
+  <div class="tagline">Haltungsanalyse zur Verlaufsdokumentation</div>
+</header>
+
+<main>
+  <!-- Ansicht + Patient -->
+  <div class="card">
+    <div class="seg" role="tablist" aria-label="Ansicht">
+      <button id="segLat" class="active" role="tab" aria-selected="true">Seitlich</button>
+      <button id="segFro" role="tab" aria-selected="false">Frontal</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field">
+        <label for="patient">Patient·in</label>
+        <input id="patient" type="text" placeholder="Name (optional)" autocomplete="off">
+      </div>
+      <div class="field narrow">
+        <label for="sessDate">Aufnahmedatum</label>
+        <input id="sessDate" type="date">
+      </div>
+    </div>
+  </div>
+
+  <!-- Leerer Zustand -->
+  <div class="card" id="emptyState">
+    <h3>Foto aufnehmen oder auswählen</h3>
+    <p>Ganzkörperaufnahme von Kopf bis Fuß.</p>
+    <div class="btnrow">
+      <button class="btn" id="btnCam">📷 Foto aufnehmen</button>
+      <button class="btn ghost" id="btnGal">Aus Galerie</button>
+    </div>
+    <div class="tips">
+      <b>Aufnahme-Tipps:</b> Kamera auf Brusthöhe und gerade halten · neutraler Stand, Blick geradeaus ·
+      eng anliegende Kleidung, Landmarken sichtbar · seitlich: exakt von der Seite fotografieren ·
+      für Verlaufsvergleiche möglichst gleiche Position und Entfernung.
+    </div>
+  </div>
+
+  <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+  <input type="file" id="fileGal" accept="image/*" hidden>
+  <input type="file" id="fileImport" accept=".json,application/json" multiple hidden>
+
+  <!-- Canvas -->
+  <div id="canvasWrap">
+    <canvas id="stage"></canvas>
+    <button id="zoomChip" class="mono" hidden>1,0× · Reset</button>
+    <div id="loupe"><canvas id="loupeCv" width="132" height="132"></canvas></div>
+  </div>
+
+  <!-- Führung -->
+  <div class="card" id="guideBar">
+    <div class="step" id="guideStep"></div>
+    <h3 id="guideName"></h3>
+    <p class="hint" id="guideHint"></p>
+    <div class="dots" id="guideDots"></div>
+    <p class="hint" id="kiMsg" hidden style="margin:0 0 10px"></p>
+    <div class="row">
+      <button class="btn small" id="btnKI">✨ Punkte per KI vorschlagen</button>
+      <button class="btn ghost small" id="btnUndo">↶ Punkt zurück</button>
+      <button class="btn ghost small" id="btnRestart">Punkte neu setzen</button>
+      <button class="btn ghost small" id="btnReplace">Foto ersetzen</button>
+    </div>
+  </div>
+
+  <!-- Ergebnisse -->
+  <div class="card" id="resultsCard">
+    <h2>Messwerte</h2>
+    <div id="metricsList"></div>
+    <div class="legalline" id="legalLine"></div>
+    <div class="field" style="margin-top:12px">
+      <label for="notes">Notizen</label>
+      <textarea id="notes" rows="3" placeholder="Beobachtungen, Maßnahmen …"></textarea>
+    </div>
+    <button class="btn block" id="btnAddSession" style="margin-top:12px" disabled>Zur Verlaufsliste hinzufügen</button>
+    <button class="btn ghost block" id="btnReport" style="margin-top:8px" disabled>Einzelbericht drucken / PDF</button>
+  </div>
+
+  <!-- Verlauf -->
+  <div class="card" id="historyCard">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h2 style="margin:0">Verlauf</h2>
+      <button class="btn ghost small" id="btnImport">Importieren</button>
+    </div>
+    <div id="histList"></div>
+    <div class="histfoot">
+      <button class="btn small" id="btnCompare" disabled>Vergleichen</button>
+      <button class="btn ghost small" id="btnExportAll" disabled>Alle exportieren</button>
+    </div>
+  </div>
+
+  <!-- Vergleich -->
+  <div class="card" id="compareCard">
+    <h2 id="cmpTitle">Vergleich</h2>
+    <div class="cmpscroll" id="cmpImgs"></div>
+    <div class="cmptwrap"><table class="cmptable" id="cmpTable"></table></div>
+    <div class="legalline" id="cmpLegal"></div>
+    <button class="btn block" id="btnCmpReport" style="margin-top:12px">Verlaufsbericht drucken / PDF</button>
+    <button class="btn ghost block" id="btnCmpClose" style="margin-top:8px">Vergleich schließen</button>
+  </div>
+
+  <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
+  exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
+  <div class="privacy mono" style="margin-top:2px">Version 1.1 · Stand 18.07.2026</div>
+</main>
+</div>
+
+<!-- Druckansicht -->
+<div id="report"></div>
+
+<script>
+'use strict';
+/* ============================================================
+   Lotlinie – Haltungsanalyse mit Verlaufsvergleich
+   Landmarken per geführtem Fingertipp (mit Lupe), Winkel werden
+   automatisch berechnet. Aufnahmen können in einer Verlaufsliste
+   gesammelt, als Datei exportiert/importiert und verglichen
+   werden. Alles läuft lokal im Browser.
+   ============================================================ */
+
+const VIEWS = {
+  lateral: {
+    label: 'Seitlich',
+    landmarks: [
+      {id:'tragus',    name:'Tragus (Ohr)',              short:'Ohr',  hint:'Kleiner Knorpel direkt vor dem Gehörgang.'},
+      {id:'c7',        name:'C7 – Vertebra prominens',   short:'C7',   hint:'Deutlich hervorstehender Wirbel am Übergang Hals / oberer Rücken.'},
+      {id:'acromion',  name:'Acromion (Schulterhöhe)',   short:'Sch',  hint:'Knöcherner Punkt ganz oben auf der Schulter.'},
+      {id:'trochanter',name:'Trochanter major (Hüfte)',  short:'Hüf',  hint:'Seitlicher Knochenvorsprung am oberen Oberschenkel.'},
+      {id:'knee',      name:'Kniegelenk (seitlich)',     short:'Knie', hint:'Seitlicher Gelenkspalt auf Kniemitte.'},
+      {id:'malleolus', name:'Außenknöchel',              short:'Knö',  hint:'Seitlicher Knöchel am Sprunggelenk.'}
+    ]
+  },
+  frontal: {
+    label: 'Frontal',
+    landmarks: [
+      {id:'eyeL', name:'Auge – linke Bildseite',         short:'Au',  hint:'Mitte der Pupille.'},
+      {id:'eyeR', name:'Auge – rechte Bildseite',        short:'Au',  hint:'Mitte der Pupille.'},
+      {id:'shL',  name:'Schulter – linke Bildseite',     short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
+      {id:'shR',  name:'Schulter – rechte Bildseite',    short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
+      {id:'hipL', name:'Beckenkamm – linke Bildseite',   short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+      {id:'hipR', name:'Beckenkamm – rechte Bildseite',  short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+      {id:'ankL', name:'Sprunggelenk – linke Bildseite', short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'},
+      {id:'ankR', name:'Sprunggelenk – rechte Bildseite',short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'}
+    ]
+  }
+};
+
+/* ---------- Zustand ---------- */
+let view = 'lateral';
+let img = null, iw = 0, ih = 0;      // aktuelles Editor-Bild
+let pts = {};                        // id -> {x,y} in Bildkoordinaten
+let state = 'empty';                 // empty | placing | done
+let placeOrder = [];                 // Reihenfolge der gesetzten Punkte (für Undo)
+let z = 1, tx = 0, ty = 0;           // Zoom & Verschiebung (CSS-Pixel)
+let currentMetrics = [];
+let editingId = null;                // Verlaufseintrag, der gerade bearbeitet wird
+
+let sessions = [];                   // Verlaufsliste (im Speicher, Export als Datei)
+const selIds = new Set();            // für Vergleich ausgewählt
+const imgCache = {};                 // id -> geladenes Image der Session
+let cmpSel = [];                     // aktuell verglichene Sessions (sortiert)
+
+/* Interaktion (Gesten) */
+const activePtrs = new Map();        // pointerId -> {x,y}
+let gesture = null;                  // 'place' | 'move' | 'pan' | 'pinch' | 'dead'
+let gestureId = null, dragId = null, lastPos = null, moveOrig = null, pinchRef = null;
+
+function nextTarget(){ return lm().find(l => !pts[l.id]) || null; }
+function placedCount(){ return lm().filter(l => pts[l.id]).length; }
+
+/* ---------- DOM ---------- */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), ctx = stage.getContext('2d');
+const wrap = $('canvasWrap');
+const loupe = $('loupe'), loupeCv = $('loupeCv'), lctx = loupeCv.getContext('2d');
+
+/* ---------- Hilfen ---------- */
+const deg = r => r * 180 / Math.PI;
+const fmt = n => n.toFixed(1).replace('.', ',') + '°';
+const lm  = () => VIEWS[view].landmarks;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function fmtDate(iso){
+  if(!iso) return '–';
+  const p = iso.split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : iso;
+}
+function nowTime(){
+  return new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+}
+$('sessDate').value = todayISO();
+
+/* ============================================================
+   Messwerte – reine Funktionen (auch für gespeicherte Aufnahmen)
+   cmp: 'higher' = größer ist besser · 'lower0' = näher an 0 besser
+        'near180' = näher an 180° besser
+   ============================================================ */
+function metricFor(p, name, norm, cmp, need, fn){
+  const ok = need.every(id => p[id]);
+  if(!ok) return {name, norm, cmp, available:false, txt:'–', sub:'Punkte fehlen', st:null, val:null};
+  const r = fn();
+  return Object.assign({name, norm, cmp, available:true}, r);
+}
+function stOf(mag, warnAt, alertAt){ return mag <= warnAt ? 'ok' : mag <= alertAt ? 'warn' : 'alert'; }
+const stWord = {ok:'im Richtbereich', warn:'leicht auffällig', alert:'auffällig'};
+
+function computeMetricsFor(v, p){
+  const out = [];
+  if(v === 'lateral'){
+    const facing = (p.tragus && p.c7) ? (Math.sign(p.tragus.x - p.c7.x) || 1) : 1;
+
+    out.push(metricFor(p, 'CVA · Kopfhaltung', 'Richtwert ≥ 50° (kleiner = Kopfvorhaltung)', 'higher',
+      ['tragus','c7'], ()=>{
+        const a = deg(Math.atan2(p.c7.y - p.tragus.y, Math.abs(p.tragus.x - p.c7.x)));
+        return {val:a, txt:fmt(a),
+          sub: a >= 50 ? 'unauffällig' : a >= 45 ? 'leichte Kopfvorhaltung' : 'deutliche Kopfvorhaltung',
+          st:  a >= 50 ? 'ok' : a >= 45 ? 'warn' : 'alert'};
+      }));
+
+    out.push(metricFor(p, 'Rumpflot', 'Richtwert 0° ± 3° (Trochanter → Acromion)', 'lower0',
+      ['trochanter','acromion'], ()=>{
+        const a = deg(Math.atan2((p.acromion.x - p.trochanter.x) * facing, p.trochanter.y - p.acromion.y));
+        const mag = Math.abs(a);
+        return {val:mag, txt:fmt(mag),
+          sub: mag <= 1 ? 'neutral' : (a > 0 ? 'nach vorn geneigt' : 'nach hinten geneigt'),
+          st: stOf(mag, 3, 6)};
+      }));
+
+    out.push(metricFor(p, 'Körperlot', 'Richtwert 0° ± 4° (Außenknöchel → Ohr)', 'lower0',
+      ['malleolus','tragus'], ()=>{
+        const a = deg(Math.atan2((p.tragus.x - p.malleolus.x) * facing, p.malleolus.y - p.tragus.y));
+        const mag = Math.abs(a);
+        return {val:mag, txt:fmt(mag),
+          sub: mag <= 1 ? 'im Lot' : (a > 0 ? 'vor dem Lot' : 'hinter dem Lot'),
+          st: stOf(mag, 4, 8)};
+      }));
+
+    out.push(metricFor(p, 'Kniewinkel', 'Richtwert ≈ 180° (Hüfte–Knie–Knöchel)', 'near180',
+      ['trochanter','knee','malleolus'], ()=>{
+        const t = p.trochanter, k = p.knee, m = p.malleolus;
+        const v1 = {x:t.x-k.x, y:t.y-k.y}, v2 = {x:m.x-k.x, y:m.y-k.y};
+        const cosv = (v1.x*v2.x + v1.y*v2.y) / ((Math.hypot(v1.x,v1.y) * Math.hypot(v2.x,v2.y)) || 1);
+        const ang = deg(Math.acos(Math.min(1, Math.max(-1, cosv))));
+        const dev = 180 - ang;
+        const cz = (m.x-t.x)*(k.y-t.y) - (m.y-t.y)*(k.x-t.x);
+        const side = -Math.sign(cz) || 0;
+        const dir = dev <= 3 ? 'neutral gestreckt' : (side === facing ? 'leicht gebeugt' : 'überstreckt');
+        return {val:ang, txt:fmt(ang), sub:dir, st: dev <= 6 ? 'ok' : dev <= 10 ? 'warn' : 'alert'};
+      }));
+
+  } else {
+    const tilt = (a, b)=>{
+      const ang = deg(Math.atan2(p[b].y - p[a].y, p[b].x - p[a].x));
+      const mag = Math.abs(ang);
+      const side = ang > 0.05 ? 'links höher' : ang < -0.05 ? 'rechts höher' : 'waagrecht';
+      return {mag, side};
+    };
+    out.push(metricFor(p, 'Kopfneigung', 'Richtwert 0° ± 3° (Augenlinie)', 'lower0',
+      ['eyeL','eyeR'], ()=>{ const t = tilt('eyeL','eyeR');
+        return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 3, 5)}; }));
+    out.push(metricFor(p, 'Schulterlinie', 'Richtwert 0° ± 2°', 'lower0',
+      ['shL','shR'], ()=>{ const t = tilt('shL','shR');
+        return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 2, 4)}; }));
+    out.push(metricFor(p, 'Beckenlinie', 'Richtwert 0° ± 2° (Crista iliaca)', 'lower0',
+      ['hipL','hipR'], ()=>{ const t = tilt('hipL','hipR');
+        return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 2, 4)}; }));
+    out.push(metricFor(p, 'Mittellinie', 'Richtwert 0° ± 2° (Sprunggelenke → Kopf)', 'lower0',
+      ['eyeL','eyeR','ankL','ankR'], ()=>{
+        const mE = {x:(p.eyeL.x+p.eyeR.x)/2, y:(p.eyeL.y+p.eyeR.y)/2};
+        const mA = {x:(p.ankL.x+p.ankR.x)/2, y:(p.ankL.y+p.ankR.y)/2};
+        const a = deg(Math.atan2(mE.x - mA.x, mA.y - mE.y));
+        const mag = Math.abs(a);
+        const side = mag <= 0.5 ? 'zentriert' : (a > 0 ? 'nach rechts verschoben (Bild)' : 'nach links verschoben (Bild)');
+        return {val:mag, txt:fmt(mag), sub:side, st:stOf(mag, 2, 4)};
+      }));
+  }
+  return out;
+}
+
+/* Veränderung alt → neu, abhängig von cmp */
+function deltaInfo(cmp, oldV, newV){
+  let dv;
+  if(cmp === 'higher') dv = newV - oldV;
+  else if(cmp === 'near180') dv = Math.abs(180 - newV) - Math.abs(180 - oldV);
+  else dv = Math.abs(newV) - Math.abs(oldV);
+  const improved = cmp === 'higher' ? dv > 0.4 : dv < -0.4;
+  const worse    = cmp === 'higher' ? dv < -0.4 : dv > 0.4;
+  const sign = dv > 0.05 ? '+' : dv < -0.05 ? '−' : '±';
+  return {
+    txt: sign + fmt(Math.abs(dv)),
+    word: improved ? 'verbessert' : worse ? 'verschlechtert' : 'stabil',
+    st: improved ? 'ok' : worse ? 'alert' : 'none'
+  };
+}
+
+/* ============================================================
+   Zeichnen – wiederverwendbar für Editor, Vergleich und Bericht
+   ============================================================ */
+function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0){
+  const s = (cssW / srcW) * zz;
+  c2.clearRect(0, 0, cssW, cssH);
+  c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
+  c2.lineCap = 'round'; c2.lineJoin = 'round';
+
+  const P = id => p[id] ? {x: p[id].x*s + ox, y: p[id].y*s + oy} : null;
+  const seg = (a, b, color, width, dash)=>{
+    if(!a || !b) return;
+    c2.strokeStyle = color; c2.lineWidth = width;
+    c2.setLineDash(dash || []);
+    c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
+    c2.setLineDash([]);
+  };
+  const plumbAt = x => seg({x, y:0}, {x, y:cssH}, '#E4573D', 2, [7,6]);
+  const inkLine = 'rgba(21,36,48,.55)';
+
+  if(v === 'lateral'){
+    const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), c=P('c7'), tr=P('tragus');
+    if(m) plumbAt(m.x);
+    seg(m,k, inkLine, 2); seg(k,t, inkLine, 2); seg(t,a, inkLine, 2);
+    seg(c,tr, '#C77E14', 2.5);
+    if(c && tr){
+      const facing = Math.sign((p.tragus.x - p.c7.x)) || 1;
+      seg(c, {x: c.x + 58*facing, y: c.y}, '#C77E14', 1.5, [4,4]);
+      const a0 = facing > 0 ? 0 : Math.PI;
+      const a1 = Math.atan2(tr.y - c.y, tr.x - c.x);
+      let diff = a1 - a0;
+      while(diff >  Math.PI) diff -= 2*Math.PI;
+      while(diff < -Math.PI) diff += 2*Math.PI;
+      c2.strokeStyle = '#C77E14'; c2.lineWidth = 1.5;
+      c2.beginPath(); c2.arc(c.x, c.y, 30, a0, a1, diff < 0); c2.stroke();
+    }
+  } else {
+    const eL=P('eyeL'), eR=P('eyeR'), sL=P('shL'), sR=P('shR'),
+          hL=P('hipL'), hR=P('hipR'), aL=P('ankL'), aR=P('ankR');
+    seg(eL,eR, '#C77E14', 2.5);
+    seg(sL,sR, '#C77E14', 2.5);
+    seg(hL,hR, '#C77E14', 2.5);
+    if(aL && aR){
+      seg(aL,aR, inkLine, 2);
+      const mid = {x:(aL.x+aR.x)/2, y:(aL.y+aR.y)/2};
+      plumbAt(mid.x);
+      if(eL && eR) seg(mid, {x:(eL.x+eR.x)/2, y:(eL.y+eR.y)/2}, '#0F766E', 2, [5,5]);
+    }
+  }
+
+  for(const l of VIEWS[v].landmarks){
+    const q = P(l.id);
+    if(!q) continue;
+    c2.beginPath(); c2.arc(q.x, q.y, 7, 0, 7); c2.fillStyle = '#fff'; c2.fill();
+    c2.beginPath(); c2.arc(q.x, q.y, 4.4, 0, 7); c2.fillStyle = '#0F766E'; c2.fill();
+    c2.font = '600 10px "IBM Plex Mono", monospace';
+    const tw = c2.measureText(l.short).width;
+    let lx = q.x + 11, ly = q.y - 18;
+    if(lx + tw + 10 > cssW) lx = q.x - tw - 21;
+    if(ly < 2) ly = q.y + 8;
+    c2.fillStyle = 'rgba(255,255,255,.92)';
+    if(c2.roundRect){ c2.beginPath(); c2.roundRect(lx, ly, tw+10, 16, 4); c2.fill(); }
+    else c2.fillRect(lx, ly, tw+10, 16);
+    c2.fillStyle = '#152430';
+    c2.fillText(l.short, lx+5, ly+11.5);
+  }
+}
+
+/* ============================================================
+   Editor: Bild laden, platzieren, Lupe
+   ============================================================ */
+let lastObjURL = null;
+async function loadFile(file){
+  if(!file) return;
+  try{
+    img = await new Promise((res, rej)=>{
+      const el = new Image();
+      el.onload = ()=>res(el); el.onerror = ()=>rej(new Error('decode'));
+      el.src = URL.createObjectURL(file);
+    });
+    if(lastObjURL) URL.revokeObjectURL(lastObjURL);
+    lastObjURL = img.src;
+  }catch(e){
+    alert('Das Bild konnte nicht geladen werden. Bitte anderes Foto versuchen.');
+    return;
+  }
+  iw = img.naturalWidth; ih = img.naturalHeight;
+  pts = {}; placeOrder = []; state = 'placing'; editingId = null;
+  z = 1; tx = 0; ty = 0; kiMsgHide();
+  $('sessDate').value = todayISO();
+  $('emptyState').style.display = 'none';
+  wrap.style.display = 'block';
+  $('guideBar').style.display = 'block';
+  $('resultsCard').style.display = 'block';
+  render(); updateGuide(); updateMetrics();
+}
+$('btnCam').addEventListener('click', ()=> $('fileCam').click());
+$('btnGal').addEventListener('click', ()=> $('fileGal').click());
+$('fileCam').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
+$('fileGal').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
+$('btnReplace').addEventListener('click', ()=> $('fileGal').click());
+
+function setView(v, silent){
+  if(v === view) return;
+  if(!silent && Object.keys(pts).length &&
+     !confirm('Ansicht wechseln? Die gesetzten Punkte werden entfernt.')) return;
+  view = v;
+  $('segLat').classList.toggle('active', v==='lateral');
+  $('segFro').classList.toggle('active', v==='frontal');
+  $('segLat').setAttribute('aria-selected', v==='lateral');
+  $('segFro').setAttribute('aria-selected', v==='frontal');
+  if(!silent){
+    pts = {}; placeOrder = []; editingId = null;
+    z = 1; tx = 0; ty = 0; kiMsgHide(); updateZoomChip();
+    if(img){ state = 'placing'; render(); }
+    updateGuide(); updateMetrics();
+  }
+}
+$('segLat').addEventListener('click', ()=> setView('lateral'));
+$('segFro').addEventListener('click', ()=> setView('frontal'));
+
+function layout(){
+  const cssW0 = wrap.clientWidth;
+  let w = cssW0, h = cssW0 * ih / iw;
+  const maxH = Math.round(window.innerHeight * 0.72);
+  if(h > maxH){ h = maxH; w = h * iw / ih; }
+  const dpr = window.devicePixelRatio || 1;
+  stage.style.width  = w + 'px';
+  stage.style.height = h + 'px';
+  stage.style.margin = '0 auto';
+  if(stage.width !== Math.round(w*dpr) || stage.height !== Math.round(h*dpr)){
+    stage.width = Math.round(w*dpr); stage.height = Math.round(h*dpr);
+  }
+  return {w, h, dpr};
+}
+function toImgXY(clientX, clientY){
+  const r = stage.getBoundingClientRect();
+  const s2 = (r.width / iw) * z;
+  return {
+    x: Math.min(iw, Math.max(0, (clientX - r.left - tx) / s2)),
+    y: Math.min(ih, Math.max(0, (clientY - r.top  - ty) / s2))
+  };
+}
+function toImg(e){ return toImgXY(e.clientX, e.clientY); }
+function clampPan(cw, ch){
+  if(z <= 1.001){ z = 1; tx = 0; ty = 0; return; }
+  tx = Math.min(0, Math.max(cw - cw*z, tx));
+  ty = Math.min(0, Math.max(ch - ch*z, ty));
+}
+function updateZoomChip(){
+  const c = $('zoomChip');
+  if(z > 1.01){ c.hidden = false; c.textContent = z.toFixed(1).replace('.', ',') + '× · Reset'; }
+  else c.hidden = true;
+}
+$('zoomChip').addEventListener('click', ()=>{ z = 1; tx = 0; ty = 0; updateZoomChip(); render(); });
+function render(){
+  if(!img) return;
+  const {w, h, dpr} = layout();
+  clampPan(w, h);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty);
+}
+
+/* ---------- Lupe ---------- */
+function showLoupe(){ loupe.style.display = 'block'; }
+function hideLoupe(){ loupe.style.display = 'none'; }
+function updateLoupe(imgPos){
+  const r = stage.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  const s2 = (r.width / iw) * z;
+  const cssX = imgPos.x*s2 + tx + (r.left - wr.left);
+  const cssY = imgPos.y*s2 + ty + (r.top  - wr.top);
+  let lx = cssX - 66, ly = cssY - 66 - 92;
+  if(ly < 4) ly = cssY + 40;
+  lx = Math.max(4, Math.min(wr.width - 136, lx));
+  loupe.style.left = lx + 'px';
+  loupe.style.top  = ly + 'px';
+
+  const zoom = Math.max(s2 * 2.2, (r.width / iw) * 3);
+  const srcW = 132 / zoom;
+  const sx = imgPos.x - srcW/2, sy = imgPos.y - srcW/2;
+  lctx.setTransform(1,0,0,1,0,0);
+  lctx.fillStyle = '#000'; lctx.fillRect(0,0,132,132);
+  try{ lctx.drawImage(img, sx, sy, srcW, srcW, 0, 0, 132, 132); }catch(e){}
+  lctx.strokeStyle = 'rgba(15,118,110,.95)'; lctx.lineWidth = 1;
+  lctx.beginPath(); lctx.moveTo(66,10); lctx.lineTo(66,54); lctx.moveTo(66,78); lctx.lineTo(66,122);
+  lctx.moveTo(10,66); lctx.lineTo(54,66); lctx.moveTo(78,66); lctx.lineTo(122,66); lctx.stroke();
+  lctx.fillStyle = '#E4573D';
+  lctx.beginPath(); lctx.arc(66,66,2.4,0,7); lctx.fill();
+  const nt = nextTarget();
+  const name = (state==='placing' && nt) ? nt.short
+             : (dragId ? (lm().find(l=>l.id===dragId)||{}).short : '');
+  if(name){
+    lctx.font = '600 11px "IBM Plex Mono", monospace';
+    const tw = lctx.measureText(name).width;
+    lctx.fillStyle = 'rgba(21,36,48,.85)';
+    lctx.fillRect(66-tw/2-6, 106, tw+12, 18);
+    lctx.fillStyle = '#fff'; lctx.fillText(name, 66-tw/2, 119);
+  }
+}
+
+/* ---------- Zeigereingaben ---------- */
+function hitPoint(pos){
+  const r = stage.getBoundingClientRect();
+  const th = 26 / ((r.width / iw) * z);
+  let best = null, bd = th;
+  for(const id in pts){
+    const d = Math.hypot(pts[id].x - pos.x, pts[id].y - pos.y);
+    if(d < bd){ bd = d; best = id; }
+  }
+  return best;
+}
+stage.addEventListener('pointerdown', e => {
+  if(!img) return;
+  e.preventDefault();
+  try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+  activePtrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+
+  if(activePtrs.size === 2){
+    /* Zweiter Finger: laufende 1-Finger-Geste abbrechen, Pinch starten */
+    if(gesture === 'move' && dragId && moveOrig) pts[dragId] = moveOrig;
+    hideLoupe();
+    const [a, b] = [...activePtrs.values()];
+    const mid = {x: (a.x+b.x)/2, y: (a.y+b.y)/2};
+    pinchRef = {d0: Math.hypot(a.x-b.x, a.y-b.y) || 1, z0: z, q: toImgXY(mid.x, mid.y)};
+    gesture = 'pinch'; gestureId = null; dragId = null; moveOrig = null;
+    render();
+    return;
+  }
+  if(activePtrs.size > 2){ gesture = 'dead'; hideLoupe(); return; }
+  if(gesture === 'dead') return;
+
+  /* Erster Finger */
+  const pos = toImg(e);
+  if(state === 'placing'){
+    gesture = 'place'; gestureId = e.pointerId; lastPos = pos;
+    showLoupe(); updateLoupe(pos);
+  } else if(state === 'done'){
+    const hit = hitPoint(pos);
+    if(hit){
+      gesture = 'move'; gestureId = e.pointerId; dragId = hit;
+      moveOrig = {x: pts[hit].x, y: pts[hit].y};
+      lastPos = pos; pts[hit] = pos;
+      showLoupe(); updateLoupe(pos); render();
+    } else if(z > 1.01){
+      gesture = 'pan'; gestureId = e.pointerId;
+      lastPos = {cx: e.clientX, cy: e.clientY};
+    }
+  }
+});
+
+stage.addEventListener('pointermove', e => {
+  if(!activePtrs.has(e.pointerId)) return;
+  activePtrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+
+  if(gesture === 'pinch'){
+    if(activePtrs.size < 2) return;
+    e.preventDefault();
+    const [a, b] = [...activePtrs.values()];
+    const mid = {x: (a.x+b.x)/2, y: (a.y+b.y)/2};
+    const d = Math.hypot(a.x-b.x, a.y-b.y) || 1;
+    z = Math.min(6, Math.max(1, pinchRef.z0 * d / pinchRef.d0));
+    const r = stage.getBoundingClientRect();
+    const s2 = (r.width / iw) * z;
+    tx = (mid.x - r.left) - pinchRef.q.x * s2;
+    ty = (mid.y - r.top ) - pinchRef.q.y * s2;
+    clampPan(r.width, r.height);
+    render(); updateZoomChip();
+    return;
+  }
+  if(e.pointerId !== gestureId) return;
+  e.preventDefault();
+  if(gesture === 'place'){
+    lastPos = toImg(e); updateLoupe(lastPos);
+  } else if(gesture === 'move'){
+    lastPos = toImg(e); pts[dragId] = lastPos;
+    render(); updateLoupe(lastPos);
+  } else if(gesture === 'pan'){
+    tx += e.clientX - lastPos.cx; ty += e.clientY - lastPos.cy;
+    lastPos = {cx: e.clientX, cy: e.clientY};
+    const r = stage.getBoundingClientRect();
+    clampPan(r.width, r.height); render();
+  }
+});
+
+function ptrEnd(e, cancelled){
+  activePtrs.delete(e.pointerId);
+  if(gesture === 'pinch'){
+    if(activePtrs.size < 2){ gesture = activePtrs.size ? 'dead' : null; pinchRef = null; }
+    return;
+  }
+  if(gesture === 'dead'){ if(!activePtrs.size) gesture = null; return; }
+  if(e.pointerId !== gestureId) return;
+
+  if(gesture === 'place' && lastPos && !cancelled){
+    const nt = nextTarget();
+    if(nt){ pts[nt.id] = lastPos; placeOrder.push(nt.id); }
+    if(!nextTarget()) state = 'done';
+    updateGuide();
+  }
+  if(gesture === 'move' && cancelled && dragId && moveOrig) pts[dragId] = moveOrig;
+  updateMetrics();
+  gesture = null; gestureId = null; dragId = null; moveOrig = null; lastPos = null;
+  hideLoupe(); render();
+}
+stage.addEventListener('pointerup', e => { e.preventDefault(); ptrEnd(e, false); });
+stage.addEventListener('pointercancel', e => { ptrEnd(e, true); });
+
+/* ---------- Führung ---------- */
+function updateGuide(){
+  const list = lm();
+  $('guideDots').innerHTML = list.map(l=>`<i class="${pts[l.id] ? 'on':''}"></i>`).join('');
+  const nt = nextTarget();
+  if(state === 'placing' && nt){
+    $('guideStep').textContent = `Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
+    $('guideName').textContent = `Tippe auf: ${nt.name}`;
+    $('guideHint').textContent = nt.hint + ' Finger gedrückt halten und mit der Lupe fein ausrichten, dann loslassen. Zwei Finger: zoomen.';
+  } else if(state === 'done'){
+    $('guideStep').textContent = `${VIEWS[view].label} · vollständig`;
+    $('guideName').textContent = 'Alle Punkte gesetzt';
+    $('guideHint').textContent = 'Punkt antippen und ziehen zum Korrigieren, dann unten zur Verlaufsliste hinzufügen. Zwei Finger: zoomen · ein Finger: verschieben (wenn gezoomt).';
+  }
+  $('btnUndo').disabled = placeOrder.length === 0;
+  $('btnKI').hidden = !(img && state === 'placing' && placedCount() === 0);
+  updateAddBtn();
+}
+$('btnUndo').addEventListener('click', ()=>{
+  const id = placeOrder.pop();
+  if(!id) return;
+  delete pts[id]; state = 'placing'; kiMsgHide();
+  updateGuide(); updateMetrics(); render();
+});
+$('btnRestart').addEventListener('click', ()=>{
+  if(Object.keys(pts).length && !confirm('Alle Punkte entfernen?')) return;
+  pts = {}; placeOrder = []; state = 'placing'; kiMsgHide();
+  updateGuide(); updateMetrics(); render();
+});
+
+/* ---------- Messwert-Anzeige ---------- */
+function updateMetrics(){
+  currentMetrics = computeMetricsFor(view, pts);
+  $('metricsList').innerHTML = currentMetrics.map(m => `
+    <div class="metric ${m.available ? '' : 'miss'}">
+      <div>
+        <div class="n">${m.name}</div>
+        <div class="norm">${m.norm}</div>
+      </div>
+      <div>
+        <div class="v mono">${m.txt}</div>
+        <div class="sub ${m.st ? 'st-'+m.st : ''}">${m.available ? (m.sub + ' · ' + stWord[m.st]) : m.sub}</div>
+      </div>
+    </div>`).join('');
+  $('btnReport').disabled = !currentMetrics.some(m => m.available);
+  $('legalLine').textContent = (view === 'frontal'
+    ? 'Seitenangaben beziehen sich auf die Bildansicht. ' : '')
+    + 'Richtwerte dienen der Orientierung. Dokumentationshilfe – keine medizinische Diagnose.';
+  updateAddBtn();
+}
+function updateAddBtn(){
+  const b = $('btnAddSession');
+  b.disabled = !(img && state === 'done');
+  b.textContent = (editingId && sessions.some(s=>s.id===editingId))
+    ? 'Änderungen in Verlaufsliste übernehmen'
+    : 'Zur Verlaufsliste hinzufügen';
+}
+
+/* ============================================================
+   Verlaufsliste
+   ============================================================ */
+function snapshotSession(){
+  const maxE = 1400;
+  const k = Math.min(1, maxE / Math.max(iw, ih));
+  const w = Math.round(iw*k), h = Math.round(ih*k);
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+  oc.getContext('2d').drawImage(img, 0, 0, w, h);
+  const p2 = {};
+  for(const id in pts) p2[id] = {x: pts[id].x*k, y: pts[id].y*k};
+  return {
+    id: editingId || ('s' + Date.now() + Math.random().toString(36).slice(2,6)),
+    dateStr: $('sessDate').value || todayISO(),
+    created: Date.now(),
+    patient: $('patient').value.trim(),
+    view, notes: $('notes').value.trim(),
+    imgData: oc.toDataURL('image/jpeg', 0.85),
+    iw: w, ih: h, pts: p2
+  };
+}
+function sortedSessions(){
+  return [...sessions].sort((a,b)=>
+    a.dateStr === b.dateStr ? a.created - b.created : (a.dateStr < b.dateStr ? -1 : 1));
+}
+
+$('btnAddSession').addEventListener('click', ()=>{
+  if(!(img && state === 'done')) return;
+  const s = snapshotSession();
+  const i = sessions.findIndex(x => x.id === s.id);
+  if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
+  else sessions.push(s);
+  editingId = s.id;
+  delete imgCache[s.id];
+  renderSessions(); updateAddBtn();
+  const b = $('btnAddSession');
+  b.textContent = '✓ Gesichert'; setTimeout(()=>{ updateAddBtn(); }, 1200);
+});
+
+function renderSessions(){
+  const list = sortedSessions();
+  const el = $('histList');
+  for(const id of [...selIds]) if(!sessions.some(s=>s.id===id)) selIds.delete(id);
+  if(!list.length){
+    el.innerHTML = `<div class="hist-empty">Noch keine Aufnahmen. Analysierte Fotos hier sichern
+      oder gespeicherte Lotlinie-Dateien (.json) importieren – z.&nbsp;B. für Vorher-Nachher-Vergleiche.</div>`;
+  } else {
+    el.innerHTML = list.map(s => `
+      <div class="hist-row" data-id="${s.id}">
+        <input type="checkbox" ${selIds.has(s.id) ? 'checked' : ''} aria-label="Für Vergleich auswählen">
+        <div class="hist-main">
+          <div class="hist-t"><span class="mono">${fmtDate(s.dateStr)}</span>
+            <span class="viewtag">${VIEWS[s.view].label}</span>
+            ${s.id === editingId ? '<span class="viewtag" style="background:rgba(169,112,15,.12);color:#8a5c0a">geöffnet</span>' : ''}
+          </div>
+          <div class="hist-sub">${esc(s.patient || 'ohne Name')}${s.notes ? ' · ' + esc(s.notes) : ''}</div>
+        </div>
+        <button class="iconbtn" data-act="export" title="Als Datei exportieren" aria-label="Exportieren">⬇</button>
+        <button class="iconbtn" data-act="del" title="Löschen" aria-label="Löschen">✕</button>
+      </div>`).join('');
+  }
+  updateHistFoot();
+}
+function updateHistFoot(){
+  const n = selIds.size;
+  $('btnCompare').disabled = n < 2;
+  $('btnCompare').textContent = n >= 2 ? `Vergleichen (${n})` : 'Vergleichen';
+  $('btnExportAll').disabled = !sessions.length;
+}
+
+$('histList').addEventListener('click', e => {
+  const row = e.target.closest('.hist-row');
+  if(!row) return;
+  const id = row.dataset.id;
+  const s = sessions.find(x => x.id === id);
+  if(!s) return;
+  if(e.target.matches('input[type=checkbox]')){
+    e.target.checked ? selIds.add(id) : selIds.delete(id);
+    updateHistFoot();
+    return;
+  }
+  const act = e.target.dataset && e.target.dataset.act;
+  if(act === 'del'){
+    if(!confirm(`Aufnahme vom ${fmtDate(s.dateStr)} löschen?`)) return;
+    sessions = sessions.filter(x => x.id !== id);
+    selIds.delete(id); delete imgCache[id];
+    if(editingId === id) editingId = null;
+    renderSessions(); updateAddBtn();
+    return;
+  }
+  if(act === 'export'){ exportSessions([s]); return; }
+  loadSession(s);   // Tipp auf den Eintrag: in den Editor laden
+});
+
+function loadSession(s){
+  const im = new Image();
+  im.onload = ()=>{
+    img = im; iw = s.iw; ih = s.ih;
+    pts = {}; for(const id in s.pts) pts[id] = {x:s.pts[id].x, y:s.pts[id].y};
+    setView(s.view, true);
+    view = s.view;
+    placeOrder = VIEWS[s.view].landmarks.filter(l => pts[l.id]).map(l => l.id);
+    state = nextTarget() ? 'placing' : 'done';
+    z = 1; tx = 0; ty = 0; updateZoomChip(); kiMsgHide();
+    editingId = s.id;
+    $('patient').value = s.patient || '';
+    $('notes').value = s.notes || '';
+    $('sessDate').value = s.dateStr || todayISO();
+    $('emptyState').style.display = 'none';
+    wrap.style.display = 'block';
+    $('guideBar').style.display = 'block';
+    $('resultsCard').style.display = 'block';
+    render(); updateGuide(); updateMetrics(); renderSessions();
+    wrap.scrollIntoView({behavior:'smooth', block:'start'});
+  };
+  im.src = s.imgData;
+}
+
+/* ---------- Export / Import ---------- */
+function download(name, text){
+  const b = new Blob([text], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 4000);
+}
+function safeName(s){ return (s || 'ohne_name').replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 40); }
+async function deliverFile(name, text){
+  try{
+    const file = new File([text], name, {type:'application/json'});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      await navigator.share({files:[file], title:name});
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  download(name, text);
+}
+function exportSessions(list){
+  const payload = JSON.stringify({app:'lotlinie', version:1, sessions:list});
+  const one = list.length === 1 ? list[0] : null;
+  const name = one
+    ? `lotlinie_${safeName(one.patient)}_${one.dateStr}_${one.view}.json`
+    : `lotlinie_verlauf_${todayISO()}.json`;
+  deliverFile(name, payload);
+}
+$('btnExportAll').addEventListener('click', ()=> exportSessions(sortedSessions()));
+$('btnImport').addEventListener('click', ()=> $('fileImport').click());
+$('fileImport').addEventListener('change', async e => {
+  let added = 0, failed = 0;
+  for(const f of e.target.files){
+    try{
+      const data = JSON.parse(await f.text());
+      const arr = Array.isArray(data.sessions) ? data.sessions : [data];
+      for(const s of arr){
+        if(s && typeof s.imgData === 'string' && s.imgData.startsWith('data:image')
+           && s.pts && VIEWS[s.view] && s.iw > 0 && s.ih > 0){
+          if(!s.id) s.id = 's' + Date.now() + Math.random().toString(36).slice(2,6);
+          if(!s.dateStr) s.dateStr = todayISO();
+          if(!s.created) s.created = Date.now();
+          if(!sessions.some(x => x.id === s.id)) { sessions.push(s); added++; }
+        } else failed++;
+      }
+    }catch(_){ failed++; }
+  }
+  e.target.value = '';
+  renderSessions();
+  if(failed) alert(`${added} Aufnahme(n) importiert, ${failed} Datei(en)/Einträge konnten nicht gelesen werden.`);
+});
+
+/* ============================================================
+   Vergleich
+   ============================================================ */
+function ensureImg(s){
+  if(imgCache[s.id]) return Promise.resolve(imgCache[s.id]);
+  return new Promise((res, rej)=>{
+    const im = new Image();
+    im.onload = ()=>{ imgCache[s.id] = im; res(im); };
+    im.onerror = rej;
+    im.src = s.imgData;
+  });
+}
+
+$('btnCompare').addEventListener('click', async ()=>{
+  const sel = sortedSessions().filter(s => selIds.has(s.id));
+  if(sel.length < 2) return;
+  const vset = new Set(sel.map(s => s.view));
+  if(vset.size > 1){
+    alert('Bitte nur Aufnahmen derselben Ansicht vergleichen (nur Seitlich oder nur Frontal).');
+    return;
+  }
+  const pset = [...new Set(sel.map(s => (s.patient||'').trim()).filter(Boolean))];
+  if(pset.length > 1 && !confirm('Achtung: Die Aufnahmen tragen unterschiedliche Namen ('
+      + pset.join(', ') + '). Trotzdem vergleichen?')) return;
+
+  cmpSel = sel;
+  const v = sel[0].view;
+  $('cmpTitle').textContent = `Vergleich · ${VIEWS[v].label} · ${fmtDate(sel[0].dateStr)} → ${fmtDate(sel[sel.length-1].dateStr)}`;
+
+  /* Bilder */
+  const imgsEl = $('cmpImgs');
+  imgsEl.innerHTML = sel.map((s,i)=>`
+    <div class="cmpitem">
+      <canvas data-i="${i}"></canvas>
+      <div class="cmpcap mono">${fmtDate(s.dateStr)}</div>
+    </div>`).join('');
+  await Promise.all(sel.map(async (s, i)=>{
+    const im = await ensureImg(s);
+    const cv = imgsEl.querySelector(`canvas[data-i="${i}"]`);
+    const cssW = cv.parentElement.clientWidth || 240;
+    const cssH = Math.round(cssW * s.ih / s.iw);
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+    cv.style.height = cssH + 'px';
+    const c2 = cv.getContext('2d');
+    c2.setTransform(dpr,0,0,dpr,0,0);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH);
+  }));
+
+  /* Tabelle */
+  buildCompareTable(sel, v, $('cmpTable'), false);
+  $('cmpLegal').textContent = 'Veränderung: älteste → neueste Aufnahme. '
+    + (v === 'frontal' ? 'Seitenangaben aus Bildsicht. ' : '')
+    + 'Richtwerte dienen der Orientierung. Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus.';
+  $('compareCard').style.display = 'block';
+  $('compareCard').scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+function buildCompareTable(sel, v, tableEl, forPrint){
+  const per = sel.map(s => computeMetricsFor(s.view, s.pts));
+  const head = `<thead><tr><th>Messwert</th>`
+    + sel.map(s => `<th>${fmtDate(s.dateStr)}</th>`).join('')
+    + `<th>Veränderung</th></tr></thead>`;
+  const rows = per[0].map((m0, mi)=>{
+    const cells = per.map(ms => {
+      const m = ms[mi];
+      return `<td class="mono ${m.st ? 'st-'+m.st : ''}">${m.available ? m.txt : '–'}</td>`;
+    }).join('');
+    const first = per[0][mi], last = per[per.length-1][mi];
+    let dcell = '<td class="delta st-none">–</td>';
+    if(first.available && last.available){
+      const d = deltaInfo(m0.cmp, first.val, last.val);
+      dcell = `<td class="delta st-${d.st}">${d.txt}<br><span style="font-size:10.5px">${d.word}</span></td>`;
+    }
+    return `<tr><td>${m0.name}</td>${cells}${dcell}</tr>`;
+  }).join('');
+  tableEl.innerHTML = head + `<tbody>${rows}</tbody>`;
+}
+
+$('btnCmpClose').addEventListener('click', ()=>{
+  $('compareCard').style.display = 'none'; cmpSel = [];
+});
+
+/* ============================================================
+   Berichte
+   ============================================================ */
+$('btnReport').addEventListener('click', ()=>{
+  const rw = Math.min(900, iw), rh = Math.round(rw * ih / iw);
+  const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh);
+  const shot = oc.toDataURL('image/jpeg', 0.92);
+  const name = $('patient').value.trim() || '—';
+  const notes = $('notes').value.trim();
+  const rows = currentMetrics.filter(m => m.available).map(m => `
+    <tr><td>${m.name}</td>
+        <td><b class="mono">${m.txt}</b></td>
+        <td>${m.sub}</td>
+        <td>${m.norm} · ${stWord[m.st]}</td></tr>`).join('');
+  $('report').innerHTML = `
+    <div class="rb">Lot&nbsp;|&nbsp;Linie · Haltungsanalyse</div>
+    <div class="meta">
+      <span><b>Patient·in:</b> ${esc(name)}</span>
+      <span><b>Aufnahmedatum:</b> ${fmtDate($('sessDate').value)}</span>
+      <span><b>Erstellt:</b> ${fmtDate(todayISO())}, ${nowTime()} Uhr</span>
+      <span><b>Ansicht:</b> ${VIEWS[view].label}</span>
+    </div>
+    <img class="single" src="${shot}" alt="Analysiertes Haltungsfoto">
+    <table>
+      <tr><th>Messwert</th><th>Wert</th><th>Einordnung</th><th>Richtwert</th></tr>
+      ${rows}
+    </table>
+    ${notes ? `<p><b>Notizen:</b> ${esc(notes)}</p>` : ''}
+    <div class="sig">Datum, Unterschrift</div>
+    <div class="disc">Interne Dokumentationshilfe. Richtwerte dienen der Orientierung und ersetzen keine
+    klinische Beurteilung oder Diagnostik. ${view==='frontal' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
+  window.print();
+});
+
+$('btnCmpReport').addEventListener('click', async ()=>{
+  if(cmpSel.length < 2) return;
+  const sel = cmpSel;
+  const v = sel[0].view;
+  const pats = [...new Set(sel.map(s => s.patient || '—'))].join(', ');
+
+  /* Bilder mit Overlays in Druckqualität rendern */
+  const shots = await Promise.all(sel.map(async s => {
+    const im = await ensureImg(s);
+    const w = Math.min(900, s.iw);
+    const h = Math.round(w * s.ih / s.iw);
+    const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h);
+    return oc.toDataURL('image/jpeg', 0.9);
+  }));
+  const perRow = Math.min(sel.length, 3);
+  const figW = Math.floor(100 / perRow) - 2;
+  const figs = sel.map((s,i)=>`
+    <figure style="width:${figW}%">
+      <img src="${shots[i]}" alt="Aufnahme ${fmtDate(s.dateStr)}">
+      <figcaption>${fmtDate(s.dateStr)}</figcaption>
+    </figure>`).join('');
+
+  const tmp = document.createElement('table');
+  buildCompareTable(sel, v, tmp, true);
+
+  const notesList = sel.filter(s => s.notes).map(s =>
+    `<li><b>${fmtDate(s.dateStr)}:</b> ${esc(s.notes)}</li>`).join('');
+
+  $('report').innerHTML = `
+    <div class="rb">Lot&nbsp;|&nbsp;Linie · Verlaufsbericht</div>
+    <div class="meta">
+      <span><b>Patient·in:</b> ${esc(pats)}</span>
+      <span><b>Zeitraum:</b> ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}</span>
+      <span><b>Ansicht:</b> ${VIEWS[v].label}</span>
+      <span><b>Aufnahmen:</b> ${sel.length}</span>
+      <span><b>Erstellt:</b> ${fmtDate(todayISO())}, ${nowTime()} Uhr</span>
+    </div>
+    <div class="cmpimgs">${figs}</div>
+    ${tmp.innerHTML ? `<table>${tmp.innerHTML}</table>` : ''}
+    ${notesList ? `<p><b>Notizen:</b></p><ul>${notesList}</ul>` : ''}
+    <div class="sig">Datum, Unterschrift</div>
+    <div class="disc">Interne Dokumentationshilfe. Veränderung bezieht sich auf älteste → neueste Aufnahme.
+    Vergleichbarkeit setzt ähnliche Aufnahmeposition und -entfernung voraus. Richtwerte dienen der Orientierung
+    und ersetzen keine klinische Beurteilung oder Diagnostik. ${v==='frontal' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
+  window.print();
+});
+
+
+/* ============================================================
+   KI-Vorschlag (Beta): MoveNet schlägt Startpositionen vor,
+   alle Punkte bleiben per Hand korrigierbar. Läuft komplett
+   im Browser; Modell (~7 MB) wird einmalig vom CDN geladen.
+   ============================================================ */
+function kiMsgShow(t){ const m = $('kiMsg'); m.textContent = t; m.hidden = false; }
+function kiMsgHide(){ $('kiMsg').hidden = true; }
+
+let kiDetector = null;
+function loadScript(srcUrl){
+  return new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = srcUrl; s.onload = res; s.onerror = ()=>rej(new Error('Netzwerkfehler: ' + srcUrl));
+    document.head.appendChild(s);
+  });
+}
+async function ensureDetector(){
+  if(kiDetector) return kiDetector;
+  if(!window.tf) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
+  if(!window.poseDetection) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+  kiDetector = await poseDetection.createDetector(
+    poseDetection.SupportedModels.MoveNet,
+    {modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER});
+  return kiDetector;
+}
+
+$('btnKI').addEventListener('click', async ()=>{
+  const btn = $('btnKI');
+  btn.disabled = true;
+  try{
+    btn.textContent = 'KI-Modell lädt … (einmalig ~7 MB)';
+    const det = await ensureDetector();
+    btn.textContent = 'Analysiere Foto …';
+    const poses = await det.estimatePoses(img);
+    const kp = {};
+    if(poses[0]) for(const k of poses[0].keypoints) kp[k.name] = k;
+    const MIN = 0.25;
+    const get = n => (kp[n] && kp[n].score >= MIN) ? {x: kp[n].x, y: kp[n].y} : null;
+    const best = (a, b)=>{
+      const A = kp[a], B = kp[b];
+      const c = (A && B) ? (A.score >= B.score ? A : B) : (A || B);
+      return (c && c.score >= MIN) ? {x: c.x, y: c.y} : null;
+    };
+    const put = (id, p)=>{ if(p && !pts[id]){
+      pts[id] = {x: Math.min(iw, Math.max(0, p.x)), y: Math.min(ih, Math.max(0, p.y))};
+      placeOrder.push(id); return true; } return false; };
+    let set = 0; const est = [];
+
+    if(view === 'lateral'){
+      const ear = best('left_ear','right_ear'), sh = best('left_shoulder','right_shoulder'),
+            hip = best('left_hip','right_hip'), kn = best('left_knee','right_knee'),
+            an  = best('left_ankle','right_ankle');
+      if(put('tragus', ear)) set++;
+      if(put('acromion', sh)) set++;
+      if(put('trochanter', hip)) set++;
+      if(put('knee', kn)) set++;
+      if(put('malleolus', an)) set++;
+      if(ear && sh && put('c7', {x: sh.x + (ear.x - sh.x)*0.35, y: sh.y + (ear.y - sh.y)*0.55})){
+        set++; est.push('C7');
+      }
+    } else {
+      const pair = (nl, nr, idL, idR, lift)=>{
+        const A = get(nl), B = get(nr);
+        if(!A || !B) return null;
+        const L = A.x <= B.x ? A : B, R = A.x <= B.x ? B : A;
+        if(put(idL, {x: L.x, y: L.y - (lift||0)})) set++;
+        if(put(idR, {x: R.x, y: R.y - (lift||0)})) set++;
+        return {L, R};
+      };
+      pair('left_eye','right_eye','eyeL','eyeR', 0);
+      const sh = pair('left_shoulder','right_shoulder','shL','shR', 0);
+      const hipL = get('left_hip'), hipR = get('right_hip');
+      if(sh && hipL && hipR){
+        const bodyScale = Math.abs(((hipL.y + hipR.y)/2) - ((sh.L.y + sh.R.y)/2));
+        pair('left_hip','right_hip','hipL','hipR', bodyScale * 0.20);
+        est.push('Beckenkamm');
+      }
+      pair('left_ankle','right_ankle','ankL','ankR', 0);
+    }
+
+    if(!set){
+      kiMsgShow('KI: keine Person sicher erkannt – bitte Punkte manuell setzen.');
+    } else {
+      state = nextTarget() ? 'placing' : 'done';
+      kiMsgShow(`KI hat ${set} Punkt${set === 1 ? '' : 'e'} vorgeschlagen`
+        + (est.length ? ` (geschätzt: ${est.join(', ')})` : '')
+        + ' – bitte jeden Punkt prüfen und bei Bedarf ziehen.'
+        + (nextTarget() ? ' Fehlende Punkte manuell tippen.' : ''));
+    }
+    render(); updateGuide(); updateMetrics();
+  }catch(err){
+    kiMsgShow('KI momentan nicht verfügbar (Internetverbindung nötig). Punkte bitte manuell setzen.');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = '✨ Punkte per KI vorschlagen';
+  }
+});
+
+/* Debug-Schnittstelle für automatisierte Tests */
+window.__lot = { get: ()=>({z, tx, ty, state, gesture,
+  placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
+
+/* ---------- Sonstiges ---------- */
+window.addEventListener('resize', ()=>{ if(img) render(); });
+renderSessions();
+</script>
+</body>
+</html>
