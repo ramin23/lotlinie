@@ -306,7 +306,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 3.4 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 3.5 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -538,7 +538,8 @@ function deltaInfo(cmp, oldV, newV){
 function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null, pOff = 0, interactive = false, pTilt = 0, bgFill = null){
   const s = (cssW / srcW) * zz;
   c2.clearRect(0, 0, cssW, cssH);
-  if(bgFill){ c2.fillStyle = bgFill; c2.fillRect(0, 0, cssW, cssH); }
+  c2.fillStyle = bgFill || '#FFFFFF';
+  c2.fillRect(0, 0, cssW, cssH);
   c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
   c2.lineCap = 'round'; c2.lineJoin = 'round';
 
@@ -665,6 +666,14 @@ async function loadFile(file){
     return;
   }
   iw = img.naturalWidth; ih = img.naturalHeight;
+  const MAXWORK = 2200;                      /* 12-MP-Fotos intern verkleinern */
+  if(Math.max(iw, ih) > MAXWORK){
+    const kk = MAXWORK / Math.max(iw, ih);
+    const wc = document.createElement('canvas');
+    wc.width = Math.round(iw*kk); wc.height = Math.round(ih*kk);
+    wc.getContext('2d').drawImage(img, 0, 0, wc.width, wc.height);
+    img = wc; iw = wc.width; ih = wc.height;
+  }
   loadSeq++;
   pts = {}; placeOrder = []; state = 'placing'; editingId = null;
   z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); tiltReset(); bgReset();
@@ -1996,7 +2005,7 @@ async function removeBackgroundCore(silent){
     const seg = await ensureSegmenter();
     if(img !== cur || loadSeq !== seqAt) return false;
     btn.textContent = 'Person wird freigestellt …';
-    const maxE = 768, k = Math.min(1, maxE / Math.max(cw, ch));
+    const maxE = 512, k = Math.min(1, maxE / Math.max(cw, ch));
     const sw = Math.round(cw*k), sh = Math.round(ch*k);
     const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
     sc.getContext('2d').drawImage(cur, 0, 0, sw, sh);
@@ -2054,6 +2063,15 @@ async function autoPrep(){
 /* Debug-Schnittstelle für automatisierte Tests */
 window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt, imgAlpha,
   placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
+
+/* Modelle beim Start vorladen: erstes Foto fühlt sich sofort schnell an */
+if(AUTO_KI){
+  setTimeout(()=>{
+    if(navigator.connection && navigator.connection.saveData) return;
+    ensureDetector().catch(()=>{});
+    ensureSegmenter().catch(()=>{});
+  }, 600);
+}
 
 /* ---------- Sonstiges ---------- */
 window.addEventListener('resize', ()=>{ if(img) render(); });
