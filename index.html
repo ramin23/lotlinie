@@ -301,7 +301,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 3.0 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 3.2 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -321,7 +321,6 @@ const AUTO_KI = !/[?&]noki=1/.test(location.search);   /* ?noki=1 deaktiviert Au
 
 const SIDE_LM = [
   {id:'tragus',    name:'Tragus (Ohr)',              short:'Ohr',  hint:'Kleiner Knorpel direkt vor dem Gehörgang.'},
-  {id:'c7',        name:'C7 – Vertebra prominens',   short:'C7',   hint:'Deutlich hervorstehender Wirbel am Übergang Hals / oberer Rücken.'},
   {id:'acromion',  name:'Acromion (Schulterhöhe)',   short:'Sch',  hint:'Knöcherner Punkt ganz oben auf der Schulter.'},
   {id:'trochanter',name:'Trochanter major (Hüfte)',  short:'Hüf',  hint:'Seitlicher Knochenvorsprung am oberen Oberschenkel.'},
   {id:'knee',      name:'Kniegelenk (seitlich)',     short:'Knie', hint:'Seitlicher Gelenkspalt auf Kniemitte.'},
@@ -354,6 +353,7 @@ let pts = {};                        // id -> {x,y} in Bildkoordinaten
 let state = 'empty';                 // empty | placing | done
 let placeOrder = [];                 // Reihenfolge der gesetzten Punkte (für Undo)
 let z = 1, tx = 0, ty = 0;           // Zoom & Verschiebung (CSS-Pixel)
+let imgAlpha = false;                // Bild ist freigestellt (transparenter Hintergrund)
 let plumbOff = 0;                    // Verschiebung der Soll-Linie (Bildpixel)
 let plumbTilt = 0;                   // Kippung der Soll-Linie (Grad) = Referenz-Senkrechte
 let tiltDeg = 0;                     // gemessene Schieflage (Grad, aus KI)
@@ -436,14 +436,17 @@ function computeMetricsFor(v, p, tiltRef = 0){
   const out = [];
   const fam = VIEWS[v].family;
   if(fam === 'side'){
-    const facing = (p.tragus && p.c7) ? (Math.sign(p.tragus.x - p.c7.x) || 1) : 1;
+    /* Blickrichtung ohne C7: Ohr relativ zu Schulter, notfalls zu Hüfte */
+    const facing = (p.tragus && p.acromion && Math.sign(p.tragus.x - p.acromion.x))
+      || (p.tragus && p.trochanter && Math.sign(p.tragus.x - p.trochanter.x)) || 1;
 
-    out.push(metricFor(p, 'CVA · Kopfhaltung', 'Richtwert ≥ 50° (kleiner = Kopfvorhaltung)', 'higher',
-      ['tragus','c7'], ()=>{
-        const a = deg(Math.atan2(p.c7.y - p.tragus.y, Math.abs(p.tragus.x - p.c7.x)));
-        return {val:a, txt:fmt(a),
-          sub: a >= 50 ? 'unauffällig' : a >= 45 ? 'leichte Kopfvorhaltung' : 'deutliche Kopfvorhaltung',
-          st:  a >= 50 ? 'ok' : a >= 45 ? 'warn' : 'alert'};
+    out.push(metricFor(p, 'Kopflot', 'Richtwert 0° ± 8° (Ohr über Schulter)', 'lower0',
+      ['tragus','acromion'], ()=>{
+        const a = deg(Math.atan2((p.tragus.x - p.acromion.x) * facing, p.acromion.y - p.tragus.y));
+        const mag = Math.abs(a);
+        return {val:mag, txt:fmt(mag),
+          sub: mag <= 3 ? 'Ohr über Schulter' : mag <= 8 ? 'leicht vorgeschoben' : 'Kopf vorgeschoben',
+          st: stOf(mag, 8, 14)};
       }));
 
     out.push(metricFor(p, 'Rumpflot', 'Richtwert 0° ± 3° (Trochanter → Acromion)', 'lower0',
@@ -526,9 +529,10 @@ function deltaInfo(cmp, oldV, newV){
 /* ============================================================
    Zeichnen – wiederverwendbar für Editor, Vergleich und Bericht
    ============================================================ */
-function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null, pOff = 0, interactive = false, pTilt = 0){
+function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null, pOff = 0, interactive = false, pTilt = 0, bgFill = null){
   const s = (cssW / srcW) * zz;
   c2.clearRect(0, 0, cssW, cssH);
+  if(bgFill){ c2.fillStyle = bgFill; c2.fillRect(0, 0, cssW, cssH); }
   c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
   c2.lineCap = 'round'; c2.lineJoin = 'round';
 
@@ -572,23 +576,10 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
   };
 
   if(VIEWS[v].family === 'side'){
-    const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), c=P('c7'), tr=P('tragus');
+    const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), tr=P('tragus');
     if(m) plumbAt(m.x, m.y);
     seg(m,k, IST, 3.5); seg(k,t, IST, 3.5); seg(t,a, IST, 3.5);
     seg(a,tr, IST, 3.5);                       /* durchgezogen bis zum Ohr */
-    seg(c,tr, '#C77E14', 3.5);                 /* CVA-Messlinie obendrauf */
-    if(c && tr){
-      const facing = Math.sign((p.tragus.x - p.c7.x)) || 1;
-      const trr = pTilt * Math.PI / 180;
-      seg(c, {x: c.x + 58*Math.cos(trr)*facing, y: c.y + 58*Math.sin(trr)*facing}, '#C77E14', 1.5, [4,4]);
-      const a0 = (facing > 0 ? 0 : Math.PI) + trr;
-      const a1 = Math.atan2(tr.y - c.y, tr.x - c.x);
-      let diff = a1 - a0;
-      while(diff >  Math.PI) diff -= 2*Math.PI;
-      while(diff < -Math.PI) diff += 2*Math.PI;
-      c2.strokeStyle = '#C77E14'; c2.lineWidth = 1.5;
-      c2.beginPath(); c2.arc(c.x, c.y, 30, a0, a1, diff < 0); c2.stroke();
-    }
   } else {
     const hL=P('headL'), hR=P('headR'), sL=P('shL'), sR=P('shR'),
           bL=P('hipL'), bR=P('hipR'), aL=P('ankL'), aR=P('ankR');
@@ -1036,13 +1027,15 @@ function snapshotSession(){
   oc.getContext('2d').drawImage(img, 0, 0, w, h);
   const p2 = {};
   for(const id in pts) p2[id] = {x: pts[id].x*k, y: pts[id].y*k};
+  const mime = imgAlpha ? 'image/png' : 'image/jpeg';
   return {
     id: editingId || ('s' + Date.now() + Math.random().toString(36).slice(2,6)),
     dateStr: $('sessDate').value || todayISO(),
     created: Date.now(),
     patient: $('patient').value.trim(),
     view, notes: $('notes').value.trim(),
-    imgData: oc.toDataURL('image/jpeg', 0.85),
+    imgData: oc.toDataURL(mime, 0.85),
+    alpha: imgAlpha,
     iw: w, ih: h, pts: p2, plumbOff: plumbOff * k, plumbTilt
   };
 }
@@ -1144,6 +1137,7 @@ function loadSession(s){
     plumbOff = s.plumbOff || 0;
     plumbTilt = s.plumbTilt || 0;
     bgReset();
+    imgAlpha = !!s.alpha;
     state = nextTarget() ? 'placing' : 'done';
     z = 1; tx = 0; ty = 0; updateZoomChip(); kiMsgHide();
     editingId = s.id;
@@ -1313,7 +1307,7 @@ $('btnCmpClose').addEventListener('click', ()=>{
 $('btnReport').addEventListener('click', ()=>{
   const rw = Math.min(900, iw), rh = Math.round(rw * ih / iw);
   const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh, 1, 0, 0, false, fmtDate($('sessDate').value || todayISO()), plumbOff, false, plumbTilt);
+  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh, 1, 0, 0, false, fmtDate($('sessDate').value || todayISO()), plumbOff, false, plumbTilt, '#FFFFFF');
   const shot = oc.toDataURL('image/jpeg', 0.92);
   const name = $('patient').value.trim() || '—';
   const notes = $('notes').value.trim();
@@ -1354,7 +1348,7 @@ $('btnCmpReport').addEventListener('click', async ()=>{
     const w = Math.min(900, s.iw);
     const h = Math.round(w * s.ih / s.iw);
     const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
-    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
     return oc.toDataURL('image/jpeg', 0.9);
   }));
   const perRow = Math.min(sel.length, 3);
@@ -1499,9 +1493,6 @@ async function runKI(){
       if(put('trochanter', hip)) set++;
       if(put('knee', kn)) set++;
       if(put('malleolus', an)) set++;
-      if(ear && sh && put('c7', {x: sh.x + (ear.x - sh.x)*0.25, y: sh.y + (ear.y - sh.y)*0.62})){
-        set++; est.push('C7');
-      }
     } else {
       const pair = (nl, nr, idL, idR, lift)=>{
         const A = get(nl), B = get(nr);
@@ -1706,7 +1697,7 @@ $('btnExamPDF').addEventListener('click', async ()=>{
       const im = await ensureImg(s);
       const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
       items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: VIEWS[s.view].label});
     }
     pdfImageRow(doc, items, imgTop, maxH, M, W);
@@ -1768,7 +1759,7 @@ $('btnCmpPDF').addEventListener('click', async ()=>{
       const im = await ensureImg(s);
       const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
       items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
     }
     pdfImageRow(doc, items, imgTop, maxH, M, W);
@@ -1923,7 +1914,7 @@ async function buildExamComparePDF(sel, dates){
         const im = await ensureImg(s);
         const rw = Math.min(600, s.iw), rh = Math.round(rw * s.ih / s.iw);
         const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
         items.push({data: oc.toDataURL('image/jpeg', 0.85), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
       }
       doc.setFont('helvetica','normal');
@@ -1963,7 +1954,7 @@ async function buildExamComparePDF(sel, dates){
    ============================================================ */
 let segPromise = null, imgOriginal = null;
 function bgReset(){
-  imgOriginal = null;
+  imgOriginal = null; imgAlpha = false;
   const b = $('btnBG');
   if(b){ b.textContent = '🪄 Hintergrund entfernen'; b.disabled = false; }
 }
@@ -1982,7 +1973,7 @@ function ensureSegmenter(){
 $('btnBG').addEventListener('click', async ()=>{
   const btn = $('btnBG');
   if(imgOriginal){                       /* Original zurück */
-    img = imgOriginal; imgOriginal = null;
+    img = imgOriginal; imgOriginal = null; imgAlpha = false;
     btn.textContent = '🪄 Hintergrund entfernen';
     render();
     kiMsgShow('Original-Hintergrund wiederhergestellt.');
@@ -2012,20 +2003,15 @@ $('btnBG').addEventListener('click', async ()=>{
     pctx.filter = 'blur(' + Math.max(1, Math.round(2/k)) + 'px)';
     pctx.drawImage(mc, 0, 0, iw, ih);
     pctx.filter = 'none';
-    const oc = document.createElement('canvas'); oc.width = iw; oc.height = ih;
-    const octx = oc.getContext('2d');
-    octx.fillStyle = '#E9EDEB';
-    octx.fillRect(0, 0, iw, ih);
-    octx.drawImage(pc, 0, 0);
     const im2 = new Image();
     im2.onload = ()=>{
-      imgOriginal = img; img = im2;
+      imgOriginal = img; img = im2; imgAlpha = true;
       btn.disabled = false;
       btn.textContent = '↩ Hintergrund wiederherstellen';
       render();
-      kiMsgShow('Hintergrund entfernt – Ränder kurz prüfen. Gleicher Knopf stellt das Original wieder her.');
+      kiMsgShow('Hintergrund entfernt (transparent) – Ränder kurz prüfen. Gleicher Knopf stellt das Original wieder her.');
     };
-    im2.src = oc.toDataURL('image/jpeg', 0.92);
+    im2.src = pc.toDataURL('image/png');
   }catch(err){
     btn.disabled = false;
     btn.textContent = '🪄 Hintergrund entfernen';
@@ -2034,7 +2020,7 @@ $('btnBG').addEventListener('click', async ()=>{
 });
 
 /* Debug-Schnittstelle für automatisierte Tests */
-window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt,
+window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt, imgAlpha,
   placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
 
 /* ---------- Sonstiges ---------- */
