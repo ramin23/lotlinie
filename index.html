@@ -209,7 +209,18 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
   <div class="card" id="emptyState">
     <h3 id="emptyTitle">Neue Analyse</h3>
     <p id="emptySub">Der geführte Ablauf nimmt alle 4 Ansichten nacheinander auf – Vorne, Rechts, Hinten, Links.</p>
-    <button class="btn block" id="btnExam" style="margin-bottom:14px">🩺 Untersuchung starten (4 Ansichten)</button>
+    <button class="btn block" id="btnExam" style="margin-bottom:10px">🩺 Untersuchung starten</button>
+    <div id="examLenRow" style="margin-bottom:14px;text-align:center">
+      <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+        <span style="font-size:12px;color:var(--ink2);font-weight:600">Ansichten:</span>
+        <div class="seg" id="examLenSeg" style="flex:0 0 auto;padding:2px">
+          <button data-len="2" style="padding:7px 16px">2</button>
+          <button data-len="3" style="padding:7px 16px">3</button>
+          <button data-len="4" class="active" style="padding:7px 16px">4</button>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink2);margin-top:5px">2: Vorne + Rechts · 3: + Hinten · 4: + Links</div>
+    </div>
     <button class="btn ghost small" id="btnSingle" style="display:block;margin:0 auto">Einzelne Ansicht ohne geführten Ablauf ▸</button>
     <div id="photoRow" hidden>
       <p style="font-size:12.5px;color:var(--ink2);margin:12px 0 10px">Ohne automatisches Weiterschalten –
@@ -318,13 +329,12 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
     <div class="cmptwrap"><table class="cmptable" id="cmpTable"></table></div>
     <div class="legalline" id="cmpLegal"></div>
     <button class="btn block" id="btnCmpPDF" style="margin-top:12px">Verlaufs-PDF erstellen & teilen</button>
-    <button class="btn ghost block" id="btnCmpReport" style="margin-top:8px">Verlaufsbericht drucken</button>
     <button class="btn ghost block" id="btnCmpClose" style="margin-top:8px">Vergleich schließen</button>
   </div>
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 3.7 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 3.9 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -798,19 +808,20 @@ function busyShow(t){ $('busyTxt').textContent = t; $('busy').hidden = false; }
 function busyHide(){ $('busy').hidden = true; }
 
 /* ---------- Setz-Hilfe: wo genau sitzt der Punkt? ---------- */
-const _H = 'fill="none" stroke="#152430" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"';
+const _SK = 'fill="#F1C5A0" stroke="#1E1E1E" stroke-width="3" stroke-linejoin="round"';
+const _LN = 'fill="none" stroke="#1E1E1E" stroke-width="2.6" stroke-linecap="round"';
 const _D = (x, y) => `<circle cx="${x}" cy="${y}" r="5.5" fill="#E0301E" stroke="#fff" stroke-width="2.5"/>`;
 const LM_HELP = {
-  tragus: `<svg viewBox="0 0 64 64" ${_H}><path d="M40 12c9 2 12 12 9 21-2 7-7 11-12 14-4 2-8 1-9-3-1-3 1-5 3-6"/><path d="M38 20c4 2 5 7 3 11-1 2-2 4-4 5"/>${_D(30,33)}</svg>`,
-  acromion: `<svg viewBox="0 0 64 64" ${_H}><path d="M22 6v14"/><path d="M22 20c10-2 22 0 30 7"/><path d="M50 26c4 4 5 12 3 20"/>${_D(45,24)}</svg>`,
-  trochanter: `<svg viewBox="0 0 64 64" ${_H}><path d="M28 6c-2 10-2 18 2 24 3 4 3 9 2 15l-2 13"/><path d="M30 28c6 2 9 6 9 11"/>${_D(38,35)}</svg>`,
-  knee: `<svg viewBox="0 0 64 64" ${_H}><path d="M30 6l2 18c1 4 4 6 4 10s-3 7-4 11l-2 13"/>${_D(37,33)}</svg>`,
-  malleolus: `<svg viewBox="0 0 64 64" ${_H}><path d="M30 6v30c0 3-1 5-1 7"/><path d="M29 45c1 4 5 6 10 7l15 2"/><path d="M26 39c0 3 2 5 5 5"/>${_D(30,42)}</svg>`,
-  eyeF: `<svg viewBox="0 0 64 64" ${_H}><path d="M10 32c8-11 36-11 44 0-8 11-36 11-44 0z"/>${_D(32,32)}</svg>`,
-  earF: `<svg viewBox="0 0 64 64" ${_H}><path d="M36 14c9 3 12 13 8 22-3 7-8 10-13 12"/><path d="M35 22c4 2 5 7 3 11"/>${_D(32,31)}</svg>`,
-  shF: `<svg viewBox="0 0 64 64" ${_H}><path d="M32 8v10"/><path d="M32 18c-9 1-18 5-24 11"/><path d="M32 18c9 1 18 5 24 11"/>${_D(50,25)}</svg>`,
-  hipF: `<svg viewBox="0 0 64 64" ${_H}><path d="M18 8c0 10 2 16 8 21M46 8c0 10-2 16-8 21"/><path d="M14 34c6-5 12-7 18-7s12 2 18 7"/>${_D(19,31)}</svg>`,
-  ankF: `<svg viewBox="0 0 64 64" ${_H}><path d="M32 6v26"/><path d="M25 34c0 4 3 6 7 6s7-2 7-6"/><path d="M24 44c2 4 6 6 12 6"/>${_D(32,37)}</svg>`
+  tragus: `<svg viewBox="0 0 64 64"><path ${_SK} d="M33 8c13-3 22 6 21 19-1 12-9 22-19 26-6 2-12-1-12-7 0-4 3-6 6-7-4-7-4-22 4-31z"/><path ${_LN} d="M37 16c6 2 9 8 7 15-1 5-4 8-8 10"/><path ${_LN} d="M30 30c3 0 4 3 3 6"/>${_D(29,34)}</svg>`,
+  acromion: `<svg viewBox="0 0 64 64"><path ${_SK} d="M37 5h21v54H25l-3-10c-8 1-13 5-16 9H4v-7c3-13 13-21 26-23 4-1 6-3 7-7V5z"/><path ${_LN} d="M43 10l5 21"/><path ${_LN} d="M31 27c8 0 15 2 21 6"/>${_D(32,25)}</svg>`,
+  trochanter: `<svg viewBox="0 0 64 64"><path ${_SK} d="M25 5h15c-3 8-3 15 1 21 6 4 9 9 9 15 0 9-5 14-7 23H21c2-8 2-14-1-20-4-7-4-15 0-23 2-5 4-10 5-16z"/><path ${_LN} d="M31 29c5 1 9 4 10 9"/>${_D(40,37)}</svg>`,
+  knee: `<svg viewBox="0 0 64 64"><path ${_SK} d="M25 5h13l2 17c1 4 5 7 5 12s-4 8-5 12l-2 13H25l2-13c1-4-2-8-2-12s3-8 2-12l-2-17z"/><path ${_LN} d="M36 28c3 2 3 8 0 11"/>${_D(38,33)}</svg>`,
+  malleolus: `<svg viewBox="0 0 64 64"><path ${_SK} d="M27 5h11v25c0 3 1 6 4 7l14 5c3 1 3 6 0 7l-25 4c-7 1-11-3-11-9v-5c0-4 3-6 4-9 2-6 3-16 3-25z"/><path ${_LN} d="M29 36a4.5 4.5 0 1 0 9 0 4.5 4.5 0 1 0-9 0"/>${_D(33.5,36)}</svg>`,
+  eyeF: `<svg viewBox="0 0 64 64"><path d="M7 32C16 19 48 19 57 32 48 45 16 45 7 32z" fill="#fff" stroke="#1E1E1E" stroke-width="3" stroke-linejoin="round"/><circle cx="32" cy="32" r="10" fill="#8a6a4f" stroke="#1E1E1E" stroke-width="2.6"/><path ${_LN} d="M12 27c8-8 32-8 40 0"/>${_D(32,32)}</svg>`,
+  earF: `<svg viewBox="0 0 64 64"><path ${_SK} d="M30 9c13-2 21 8 19 21-2 12-10 20-18 23-6 2-11-1-10-7 1-4 4-6 6-8-4-8-3-20 3-29z"/><path ${_LN} d="M35 17c5 2 7 8 5 14-1 4-4 7-7 8"/>${_D(31,31)}</svg>`,
+  shF: `<svg viewBox="0 0 64 64"><path ${_SK} d="M26 5h12v10c11 1 19 7 23 15v29H3V30C7 22 15 16 26 15V5z"/><path ${_LN} d="M13 30c6-3 12-5 19-5m0 0c7 0 13 2 19 5"/>${_D(51,25)}</svg>`,
+  hipF: `<svg viewBox="0 0 64 64"><path ${_SK} d="M18 5h28c-2 8-1 14 3 19s6 10 6 16v19H9V40c0-6 2-11 6-16s5-11 3-19z"/><path ${_LN} d="M12 34c6-4 13-6 20-6s14 2 20 6"/>${_D(14,32)}</svg>`,
+  ankF: `<svg viewBox="0 0 64 64"><path ${_SK} d="M25 5h14v25c4 1 7 3 7 7s-3 6-7 7v14H25V44c-4-1-7-3-7-7s3-6 7-7V5z"/><path ${_LN} d="M17 36a3.5 3.5 0 1 0 7 0m16 0a3.5 3.5 0 1 0 7 0"/>${_D(32,37)}</svg>`
 };
 function helpKeyFor(l){
   if(!l) return null;
@@ -1051,14 +1062,14 @@ function updateGuide(){
   $('guideDots').innerHTML = list.map(l=>`<i class="${pts[l.id] ? 'on':''}"></i>`).join('');
   const nt = nextTarget();
   if(state === 'placing' && nt){
-    const modus = exam ? `Untersuchung ${exam.idx+1}/4` : 'Einzelaufnahme';
+    const modus = exam ? `Untersuchung ${exam.idx+1}/${exam.len}` : 'Einzelaufnahme';
     $('guideStep').textContent = `${modus} · Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
     showLmHelp(nt, kiHints[nt.id] || null);
     $('guideName').textContent = `Tippe auf: ${nt.name}`;
     $('guideHint').textContent = nt.hint + ' Finger gedrückt halten und mit der Lupe fein ausrichten, dann loslassen. Zwei Finger: zoomen.';
   } else if(state === 'done'){
     kiMsgHide();
-    const modus = exam ? `Untersuchung ${exam.idx+1}/4` : 'Einzelaufnahme';
+    const modus = exam ? `Untersuchung ${exam.idx+1}/${exam.len}` : 'Einzelaufnahme';
     $('guideStep').textContent = `${modus} · ${VIEWS[view].label} · vollständig`;
     hideLmHelp();
     $('guideName').textContent = 'Fertig – Punkte prüfen';
@@ -1156,7 +1167,7 @@ function saveCurrentToVerlauf(){
   if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
   else sessions.push(s);
   editingId = s.id;
-  delete imgCache[s.id];
+  delete imgCache[s.id]; delete cutCache[s.id];
   renderSessions(); updateAddBtn();
   return s;
 }
@@ -1222,7 +1233,7 @@ $('histList').addEventListener('click', e => {
   if(act === 'del'){
     if(!confirm(`Aufnahme vom ${fmtDate(s.dateStr)} löschen?`)) return;
     sessions = sessions.filter(x => x.id !== id);
-    selIds.delete(id); delete imgCache[id];
+    selIds.delete(id); delete imgCache[id]; delete cutCache[id];
     if(editingId === id) editingId = null;
     renderSessions(); updateAddBtn();
     return;
@@ -1441,54 +1452,7 @@ $('btnReport').addEventListener('click', ()=>{
   window.print();
 });
 
-$('btnCmpReport').addEventListener('click', async ()=>{
-  if(cmpSel.length < 2) return;
-  const sel = cmpSel;
-  const v = sel[0].view;
-  const pats = [...new Set(sel.map(s => s.patient || '—'))].join(', ');
-
-  /* Bilder mit Overlays in Druckqualität rendern */
-  const shots = await Promise.all(sel.map(async s => {
-    const im = await ensureImg(s);
-    const w = Math.min(900, s.iw);
-    const h = Math.round(w * s.ih / s.iw);
-    const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
-    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
-    return oc.toDataURL('image/jpeg', 0.9);
-  }));
-  const perRow = Math.min(sel.length, 3);
-  const figW = Math.floor(100 / perRow) - 2;
-  const figs = sel.map((s,i)=>`
-    <figure style="width:${figW}%">
-      <img src="${shots[i]}" alt="Aufnahme ${fmtDate(s.dateStr)}">
-      <figcaption>${fmtDate(s.dateStr)}</figcaption>
-    </figure>`).join('');
-
-  const tmp = document.createElement('table');
-  buildCompareTable(sel, v, tmp, true);
-
-  const notesList = sel.filter(s => s.notes).map(s =>
-    `<li><b>${fmtDate(s.dateStr)}:</b> ${esc(s.notes)}</li>`).join('');
-
-  $('report').innerHTML = `
-    <div class="rb">Lot&nbsp;|&nbsp;Linie · Verlaufsbericht</div>
-    <div class="meta">
-      <span><b>Patient·in:</b> ${esc(pats)}</span>
-      <span><b>Zeitraum:</b> ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}</span>
-      <span><b>Ansicht:</b> ${VIEWS[v].label}</span>
-      <span><b>Aufnahmen:</b> ${sel.length}</span>
-      <span><b>Erstellt:</b> ${fmtDate(todayISO())}, ${nowTime()} Uhr</span>
-    </div>
-    <div class="cmpimgs">${figs}</div>
-    ${tmp.innerHTML ? `<table>${tmp.innerHTML}</table>` : ''}
-    ${notesList ? `<p><b>Notizen:</b></p><ul>${notesList}</ul>` : ''}
-    <div class="sig">Datum, Unterschrift</div>
-    <div class="disc">Interne Dokumentationshilfe. Veränderung bezieht sich auf älteste → neueste Aufnahme.
-    Vergleichbarkeit setzt ähnliche Aufnahmeposition und -entfernung voraus. Richtwerte dienen der Orientierung
-    und ersetzen keine klinische Beurteilung oder Diagnostik. ${VIEWS[v].family==='pairs' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
-  window.print();
-});
-
+/* (Druckweg entfernt: der Vergleich erzeugt direkt ein teilbares PDF) */
 
 /* ============================================================
    KI-Vorschlag (Beta): MoveNet schlägt Startpositionen vor,
@@ -1672,16 +1636,24 @@ $('btnKI').addEventListener('click', runKI);
    ============================================================ */
 let previewIds = [];
 
-let singleOpen = false;
+let singleOpen = false, examLen = 4;
+document.querySelectorAll('#examLenSeg button').forEach(b => {
+  b.addEventListener('click', ()=>{
+    examLen = parseInt(b.dataset.len, 10);
+    document.querySelectorAll('#examLenSeg button').forEach(x =>
+      x.classList.toggle('active', x === b));
+  });
+});
 function updateExamUI(){
   const on = !!exam;
   $('btnExam').hidden = on;
+  $('examLenRow').hidden = on;
   $('examRow').hidden = !on;
   $('btnSingle').hidden = on || singleOpen;
   $('photoRow').hidden = !(on || singleOpen);
   if(on) $('btnExamNext').disabled = !(img && state === 'done');
   if(on && !img){
-    $('emptyTitle').textContent = `Ansicht ${exam.idx+1} von 4 · ${VIEWS[EXAM_ORDER[exam.idx]].label}`;
+    $('emptyTitle').textContent = `Ansicht ${exam.idx+1} von ${exam.len} · ${VIEWS[EXAM_ORDER[exam.idx]].label}`;
     $('emptySub').textContent = 'Foto aufnehmen oder auswählen – die KI setzt die Punkte vor, du korrigierst nur.';
   } else if(!on){
     $('emptyTitle').textContent = 'Neue Analyse';
@@ -1703,7 +1675,7 @@ function resetToEmpty(){
 }
 
 $('btnExam').addEventListener('click', ()=>{
-  exam = {idx: 0, ids: {}};
+  exam = {idx: 0, ids: {}, len: examLen};
   editingId = null;
   $('previewCard').style.display = 'none';
   resetToEmpty();
@@ -1723,8 +1695,8 @@ function examAdvance(save){
     renderSessions();
   }
   exam.idx++;
-  if(exam.idx >= EXAM_ORDER.length){
-    const ids = EXAM_ORDER.map(v => exam.ids[v]).filter(Boolean);
+  if(exam.idx >= exam.len){
+    const ids = EXAM_ORDER.slice(0, exam.len).map(v => exam.ids[v]).filter(Boolean);
     exam = null;
     resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
     if(ids.length) buildPreview(ids);
@@ -1864,7 +1836,7 @@ $('btnExamPDF').addEventListener('click', async ()=>{
     doc.setFontSize(7.5); doc.setTextColor(110);
     doc.text(doc.splitTextToSize('Interne Dokumentationshilfe. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung oder Diagnostik. Seitenangaben aus Bildsicht. Rot gestrichelt = Soll (Lot), Türkis = Ist. Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
 
-    const name = `lotlinie_${safeName(pat)}_${sel[0].dateStr}.pdf`;
+    const name = `${safeName(pat) || 'Patient'}_Untersuchung_${sel[0].dateStr}.pdf`;
     await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
   }catch(err){
     alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
@@ -1873,30 +1845,35 @@ $('btnExamPDF').addEventListener('click', async ()=>{
   }
 });
 
-/* Verlaufs-PDF: gleiche Ansicht, mehrere Daten nebeneinander, teilbar */
+/* Verlaufs-PDF: gleiche Ansicht, mehrere Daten – Bilder freigestellt, Werte tabellarisch */
 $('btnCmpPDF').addEventListener('click', async ()=>{
   if(cmpSel.length < 2) return;
   const btn = $('btnCmpPDF');
   const orig = btn.textContent;
   btn.disabled = true;
   try{
-    btn.textContent = 'PDF wird erstellt …';
     await ensurePDFLib();
     const sel = cmpSel, v = sel[0].view;
+    let done = 0;
+    for(const s of sel){
+      btn.textContent = `Bilder freistellen ${++done}/${sel.length} …`;
+      await ensureCutout(s);
+    }
+    btn.textContent = 'PDF wird erstellt …';
     const {jsPDF} = window.jspdf;
     const doc = new jsPDF({unit:'mm', format:'a4'});
     const W = 210, M = 14;
     doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text('LOT | LINIE  ·  VERLAUFSVERGLEICH', M, 18);
+    doc.text('LOT | LINIE  ·  VERLAUFSVERGLEICH', M, 16);
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70);
-    const pat = [...new Set(sel.map(s => s.patient || '—'))].join(', ');
-    doc.text(`Patient·in: ${pat}     Ansicht: ${VIEWS[v].label}     Zeitraum: ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}`, M, 24);
+    const pat = [...new Set(sel.map(s => s.patient || ''))].filter(Boolean).join(', ') || 'Patient';
+    doc.text(`Patient·in: ${pat}     Ansicht: ${VIEWS[v].label}     Zeitraum: ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}`, M, 22);
     doc.setTextColor(0);
 
-    const imgTop = 30, maxH = 104;
+    const imgTop = 27, maxH = 108;
     const items = [];
     for(const s of sel){
-      const im = await ensureImg(s);
+      const im = await ensureCutout(s);
       const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
       paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
@@ -1904,31 +1881,28 @@ $('btnCmpPDF').addEventListener('click', async ()=>{
     }
     pdfImageRow(doc, items, imgTop, maxH, M, W);
 
-    let y = imgTop + maxH + 13;
-    doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(11);
-    doc.text('Veränderung (von ältester zu neuester Aufnahme)', M, y); y += 6;
-    doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    let y = imgTop + maxH + 12;
     const per = sel.map(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0));
+    const n = sel.length;
+    const valW = Math.min(30, Math.round((182 - 56 - 52) / n));
+    const widths = [56, ...Array(n).fill(valW), 182 - 56 - valW*n];
+    const header = ['Messwert', ...sel.map(s => fmtDate(s.dateStr)), 'Veränderung'];
+    const rows = [];
     per[0].forEach((m0, mi)=>{
-      const a = per[0][mi], b = per[per.length - 1][mi];
-      let line;
-      if(a.available && b.available){
-        const d = deltaInfo(m0.cmp, a.val, b.val);
-        line = `•  ${m0.name}: ${a.txt}  »  ${b.txt}    (${d.txt} · ${d.word})`;
-      } else {
-        line = `•  ${m0.name}: nicht in beiden Aufnahmen erfasst`;
-      }
-      const ls = doc.splitTextToSize(line, W - 2*M);
-      doc.text(ls, M, y);
-      y += ls.length * 4.8 + 1.2;
+      const first = per[0][mi], last = per[n-1][mi];
+      const vals = per.map(pm => pm[mi].available ? pm[mi].txt : '–');
+      const delta = (first.available && last.available)
+        ? (d => `${d.txt} · ${d.word}`)(deltaInfo(m0.cmp, first.val, last.val)) : '–';
+      rows.push([m0.name, ...vals, delta]);
     });
+    y = pdfTable(doc, M, y, widths, header, rows);
 
-    doc.setDrawColor(60); doc.line(M, 270, M + 60, 270);
-    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, 274);
+    doc.setDrawColor(60); doc.line(M, 268, M + 60, 268);
+    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, 272);
     doc.setFontSize(7.5); doc.setTextColor(110);
-    doc.text(doc.splitTextToSize('Interne Dokumentationshilfe. Veränderung bezieht sich auf älteste → neueste Aufnahme; Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung oder Diagnostik. ' + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '') + 'Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+    doc.text(doc.splitTextToSize('Veränderung: älteste zu neuester Aufnahme; Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung. ' + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '') + 'Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
 
-    const name = `lotlinie_vergleich_${safeName(pat)}_${safeName(VIEWS[v].label)}.pdf`;
+    const name = `${safeName(pat)}_Verlauf_${safeName(VIEWS[v].label)}.pdf`;
     await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
   }catch(err){
     alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
@@ -1999,6 +1973,44 @@ $('btnTiltPlumb').addEventListener('click', ()=>{
   render(); updateMetrics();
 });
 
+/* Vergleichstabelle im PDF */
+function pdfTable(doc, x, y, widths, header, rows){
+  const TW = widths.reduce((a,b)=> a+b, 0), rh = 7;
+  const wordColor = w => w === 'verbessert' ? [13,120,110]
+    : w === 'verschlechtert' ? [198,60,40]
+    : [105,112,110];
+  doc.setFontSize(9);
+  doc.setFillColor(238,242,241); doc.setDrawColor(178,188,186);
+  doc.rect(x, y, TW, rh, 'FD');
+  doc.setFont('helvetica','bold'); doc.setTextColor(25,35,33);
+  let cx = x;
+  header.forEach((h, i)=>{ doc.text(String(h), cx + 2.2, y + 4.8); cx += widths[i]; });
+  y += rh;
+  doc.setFont('helvetica','normal');
+  for(const r of rows){
+    doc.setDrawColor(208,216,214);
+    doc.rect(x, y, TW, rh);
+    cx = x;
+    r.forEach((c, i)=>{
+      if(i === r.length - 1){
+        const w = String(c).split('·').pop().trim();
+        doc.setTextColor(...wordColor(w));
+      } else doc.setTextColor(20,24,23);
+      doc.text(String(c), cx + 2.2, y + 4.8);
+      cx += widths[i];
+    });
+    y += rh;
+  }
+  doc.setDrawColor(208,216,214);
+  cx = x;
+  for(let i = 0; i < widths.length - 1; i++){
+    cx += widths[i];
+    doc.line(cx, y - rh*(rows.length+1), cx, y);
+  }
+  doc.setTextColor(0);
+  return y;
+}
+
 /* Bildreihe im PDF: Bilder direkt aneinander, als Gruppe zentriert */
 function pdfImageRow(doc, items, yTop, maxH, M, W, gap = 3){
   const usable = W - 2*M;
@@ -2021,8 +2033,11 @@ function pdfImageRow(doc, items, yTop, maxH, M, W, gap = 3){
   doc.setTextColor(0);
 }
 
-/* Untersuchungs-Vergleich: für jede Ansicht alt/neu nebeneinander, ein PDF */
+/* Untersuchungs-Vergleich: pro Ansicht eine Seite – Bilder freigestellt, Werte tabellarisch */
 async function buildExamComparePDF(sel, dates){
+  const btn = $('btnCompare');
+  const orig = btn ? btn.textContent : '';
+  if(btn) btn.disabled = true;
   try{
     await ensurePDFLib();
     const {jsPDF} = window.jspdf;
@@ -2030,60 +2045,71 @@ async function buildExamComparePDF(sel, dates){
     const W = 210, M = 14;
     const pick = (view, date) => {
       const c = sel.filter(s => s.view === view && s.dateStr === date)
-                   .sort((a,b)=> b.created - a.created);
+                   .sort((a2,b2)=> b2.created - a2.created);
       return c[0] || null;
     };
-    const pat = [...new Set(sel.map(s => s.patient || '—'))].join(', ');
-    doc.setFont('helvetica','bold'); doc.setFontSize(13);
-    doc.text('LOT | LINIE  ·  UNTERSUCHUNGS-VERGLEICH', M, 18);
-    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70);
-    doc.text(`Patient·in: ${pat}     Termine: ${fmtDate(dates[0])}  und  ${fmtDate(dates[1])}`, M, 24);
-    doc.setTextColor(0);
-    let y = 32, sections = 0;
-
-    for(const v of EXAM_ORDER){
-      const a = pick(v, dates[0]), b = pick(v, dates[1]);
-      if(!a || !b) continue;
-      const secH = 78 + 6 + 4;
-      if(y + secH + 34 > 280){ doc.addPage(); y = 18; }
-      doc.setFont('helvetica','bold'); doc.setFontSize(11);
-      doc.text(VIEWS[v].label, M, y); y += 4;
-      const imgH = 78;
-      const items = [];
-      for(const s of [a, b]){
-        const im = await ensureImg(s);
-        const rw = Math.min(600, s.iw), rh = Math.round(rw * s.ih / s.iw);
-        const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
-        items.push({data: oc.toDataURL('image/jpeg', 0.85), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
-      }
-      doc.setFont('helvetica','normal');
-      pdfImageRow(doc, items, y, imgH, M, W);
-      y += imgH + 8;
-      doc.setTextColor(0); doc.setFontSize(8.5);
-      const ma = computeMetricsFor(v, a.pts, a.plumbTilt || 0), mb = computeMetricsFor(v, b.pts, b.plumbTilt || 0);
-      ma.forEach((m0, mi)=>{
-        if(!(m0.available && mb[mi].available)) return;
-        const d = deltaInfo(m0.cmp, m0.val, mb[mi].val);
-        const line = `${m0.name}: ${m0.txt}  »  ${mb[mi].txt}   (${d.txt} · ${d.word})`;
-        doc.text(doc.splitTextToSize(line, W - 2*M), M, y);
-        y += 4.2;
-      });
-      y += 6; sections++;
-    }
-    if(!sections){
+    const pat = [...new Set(sel.map(s => s.patient || ''))].filter(Boolean).join(', ') || 'Patient';
+    const pairs = EXAM_ORDER.map(v => ({v, a: pick(v, dates[0]), b: pick(v, dates[1])}))
+                            .filter(p => p.a && p.b);
+    if(!pairs.length){
       alert('Keine Ansicht ist an beiden Terminen vorhanden – Vergleich nicht möglich.');
       return;
     }
-    if(y + 30 > 285){ doc.addPage(); y = 20; }
-    doc.setDrawColor(60); doc.line(M, y + 8, M + 60, y + 8);
-    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, y + 12);
-    doc.setFontSize(7.5); doc.setTextColor(110);
-    doc.text(doc.splitTextToSize('Interne Dokumentationshilfe. Veränderungen jeweils vom ersten zum zweiten Termin; Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung. Seitenangaben aus Bildsicht. Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, y + 19);
-    const name = `lotlinie_vergleich_${safeName(pat)}_${dates[0]}_${dates[1]}.pdf`;
+    let done = 0;
+    for(const p of pairs){
+      for(const s of [p.a, p.b]){
+        if(btn) btn.textContent = `Bilder freistellen ${++done}/${pairs.length*2} …`;
+        await ensureCutout(s);
+      }
+    }
+    if(btn) btn.textContent = 'PDF wird erstellt …';
+
+    let page = 0;
+    for(const {v, a: sa, b: sb} of pairs){
+      if(page++) doc.addPage();
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(105);
+      doc.text(`LOT | LINIE · VERGLEICH     ${pat}     ${fmtDate(dates[0])}  »  ${fmtDate(dates[1])}     Seite ${page}/${pairs.length}`, M, 11);
+      doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(14);
+      doc.text(VIEWS[v].label, M, 20);
+
+      const imgTop = 25, maxH = 120;
+      const items = [];
+      for(const s of [sa, sb]){
+        const im = await ensureCutout(s);
+        const rw = Math.min(650, s.iw), rh = Math.round(rw * s.ih / s.iw);
+        const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+        items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
+      }
+      doc.setFont('helvetica','normal');
+      pdfImageRow(doc, items, imgTop, maxH, M, W);
+
+      let y = imgTop + maxH + 12;
+      const ma = computeMetricsFor(v, sa.pts, sa.plumbTilt || 0);
+      const mb = computeMetricsFor(v, sb.pts, sb.plumbTilt || 0);
+      const rows = [];
+      ma.forEach((m0, mi)=>{
+        if(!(m0.available && mb[mi].available)) return;
+        const d = deltaInfo(m0.cmp, m0.val, mb[mi].val);
+        rows.push([m0.name, m0.txt, mb[mi].txt, `${d.txt} · ${d.word}`]);
+      });
+      if(rows.length){
+        pdfTable(doc, M, y, [62, 30, 30, 60],
+          ['Messwert', fmtDate(sa.dateStr), fmtDate(sb.dateStr), 'Veränderung'], rows);
+      }
+      doc.setFontSize(7.5); doc.setTextColor(110);
+      doc.text(doc.splitTextToSize('Veränderung vom ersten zum zweiten Termin. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung. ' + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '') + 'Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+      doc.setTextColor(0);
+    }
+    doc.setDrawColor(60); doc.line(M, 266, M + 60, 266);
+    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, 270);
+
+    const name = `${safeName(pat)}_Vergleich_${dates[0]}_${dates[1]}.pdf`;
     await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
   }catch(err){
     alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = orig; }
   }
 }
 
@@ -2098,6 +2124,82 @@ function bgReset(){
   const b = $('btnBG');
   if(b){ b.textContent = '🪄 Hintergrund entfernen'; b.disabled = false; }
 }
+/* Weiche Zwei-Pass-Freistellung: liefert Canvas mit transparenter Person oder null */
+async function buildSoftCutout(seg, source, cw, ch){
+  const softMask = async (srcCanvas) => {
+    const people = await seg.segmentPeople(srcCanvas);
+    if(!people || !people.length) return null;
+    const md = await people[0].mask.toImageData();
+    const a = md.data;
+    for(let i = 0; i < a.length; i += 4){
+      const pr = a[i];
+      a[i] = 255; a[i+1] = 255; a[i+2] = 255;
+      a[i+3] = pr <= 40 ? 0 : pr >= 170 ? 255 : Math.round((pr - 40) * 255 / 130);
+    }
+    const cv = document.createElement('canvas');
+    cv.width = srcCanvas.width; cv.height = srcCanvas.height;
+    cv.getContext('2d').putImageData(md, 0, 0);
+    return cv;
+  };
+  const e1 = 512, k1 = Math.min(1, e1 / Math.max(cw, ch));
+  const s1 = document.createElement('canvas');
+  s1.width = Math.round(cw*k1); s1.height = Math.round(ch*k1);
+  s1.getContext('2d').drawImage(source, 0, 0, s1.width, s1.height);
+  const m1 = await softMask(s1);
+  if(!m1) return null;
+  const d1 = m1.getContext('2d').getImageData(0, 0, m1.width, m1.height).data;
+  let x0 = m1.width, x1 = 0, y0 = m1.height, y1 = 0, found = false;
+  for(let yy = 0; yy < m1.height; yy++)
+    for(let xx = 0; xx < m1.width; xx++)
+      if(d1[(yy*m1.width + xx)*4 + 3] > 96){
+        found = true;
+        if(xx < x0) x0 = xx; if(xx > x1) x1 = xx;
+        if(yy < y0) y0 = yy; if(yy > y1) y1 = yy;
+      }
+  const maskFull = document.createElement('canvas');
+  maskFull.width = cw; maskFull.height = ch;
+  const mfx = maskFull.getContext('2d');
+  mfx.imageSmoothingEnabled = true; mfx.imageSmoothingQuality = 'high';
+  if(found && (x1-x0) > 8 && (y1-y0) > 16){
+    const mx = (x1-x0)*0.06 + 3, my = (y1-y0)*0.04 + 3;
+    const bx = Math.max(0, (x0-mx)/k1), by = Math.max(0, (y0-my)/k1);
+    const bw = Math.min(cw, (x1+mx)/k1) - bx, bh = Math.min(ch, (y1+my)/k1) - by;
+    const e2 = 768, k2 = Math.min(1, e2 / Math.max(bw, bh));
+    const s2 = document.createElement('canvas');
+    s2.width = Math.round(bw*k2); s2.height = Math.round(bh*k2);
+    s2.getContext('2d').drawImage(source, bx, by, bw, bh, 0, 0, s2.width, s2.height);
+    const m2 = await softMask(s2);
+    if(m2) mfx.drawImage(m2, bx, by, bw, bh);
+    else mfx.drawImage(m1, 0, 0, cw, ch);
+  } else {
+    mfx.drawImage(m1, 0, 0, cw, ch);
+  }
+  const pc = document.createElement('canvas'); pc.width = cw; pc.height = ch;
+  const pctx = pc.getContext('2d');
+  pctx.drawImage(source, 0, 0);
+  pctx.globalCompositeOperation = 'destination-in';
+  pctx.filter = 'blur(1.5px)';
+  pctx.drawImage(maskFull, 0, 0);
+  pctx.filter = 'none';
+  return pc;
+}
+
+/* Für PDFs: Sitzungsbild freigestellt liefern (mit Cache, Original als Fallback) */
+const cutCache = {};
+async function ensureCutout(s){
+  if(cutCache[s.id]) return cutCache[s.id];
+  const im = await ensureImg(s);
+  if(s.alpha){ cutCache[s.id] = im; return im; }
+  try{
+    const seg = await ensureSegmenter();
+    const c = await buildSoftCutout(seg, im, s.iw, s.ih);
+    cutCache[s.id] = c || im;
+  }catch(e){
+    cutCache[s.id] = im;
+  }
+  return cutCache[s.id];
+}
+
 function ensureSegmenter(){
   if(segPromise) return segPromise;
   segPromise = (async ()=>{
@@ -2121,75 +2223,9 @@ async function removeBackgroundCore(silent){
     if(img !== cur || loadSeq !== seqAt) return false;
     btn.textContent = 'Person wird freigestellt …';
     busyShow('Hintergrund wird entfernt …');
-
-    const softMask = async (srcCanvas) => {          /* weiche Alpha-Maske statt harter Kante */
-      const people = await seg.segmentPeople(srcCanvas);
-      if(!people || !people.length) return null;
-      const md = await people[0].mask.toImageData();
-      const a = md.data;
-      for(let i = 0; i < a.length; i += 4){
-        const pr = a[i];
-        a[i] = 255; a[i+1] = 255; a[i+2] = 255;
-        a[i+3] = pr <= 40 ? 0 : pr >= 170 ? 255 : Math.round((pr - 40) * 255 / 130);
-      }
-      const cv = document.createElement('canvas');
-      cv.width = srcCanvas.width; cv.height = srcCanvas.height;
-      cv.getContext('2d').putImageData(md, 0, 0);
-      return cv;
-    };
-
-    /* Durchgang 1: grob im Gesamtbild */
-    const e1 = 512, k1 = Math.min(1, e1 / Math.max(cw, ch));
-    const s1 = document.createElement('canvas');
-    s1.width = Math.round(cw*k1); s1.height = Math.round(ch*k1);
-    s1.getContext('2d').drawImage(cur, 0, 0, s1.width, s1.height);
-    const m1 = await softMask(s1);
+    const pc = await buildSoftCutout(seg, cur, cw, ch);
     if(img !== cur || loadSeq !== seqAt) return false;
-    if(!m1) throw new Error('keine Person');
-
-    /* Personen-Rahmen aus der groben Maske */
-    const d1 = m1.getContext('2d').getImageData(0, 0, m1.width, m1.height).data;
-    let x0 = m1.width, x1 = 0, y0 = m1.height, y1 = 0, found = false;
-    for(let yy = 0; yy < m1.height; yy++)
-      for(let xx = 0; xx < m1.width; xx++)
-        if(d1[(yy*m1.width + xx)*4 + 3] > 96){
-          found = true;
-          if(xx < x0) x0 = xx; if(xx > x1) x1 = xx;
-          if(yy < y0) y0 = yy; if(yy > y1) y1 = yy;
-        }
-    let maskFull;
-    if(found && (x1-x0) > 8 && (y1-y0) > 16){
-      const mx = (x1-x0)*0.06 + 3, my = (y1-y0)*0.04 + 3;
-      const bx = Math.max(0, (x0-mx)/k1), by = Math.max(0, (y0-my)/k1);
-      const bw = Math.min(cw, (x1+mx)/k1) - bx, bh = Math.min(ch, (y1+my)/k1) - by;
-      /* Durchgang 2: nur die Person, in höherer Auflösung */
-      const e2 = 768, k2 = Math.min(1, e2 / Math.max(bw, bh));
-      const s2 = document.createElement('canvas');
-      s2.width = Math.round(bw*k2); s2.height = Math.round(bh*k2);
-      s2.getContext('2d').drawImage(cur, bx, by, bw, bh, 0, 0, s2.width, s2.height);
-      const m2 = await softMask(s2);
-      if(img !== cur || loadSeq !== seqAt) return false;
-      maskFull = document.createElement('canvas');
-      maskFull.width = cw; maskFull.height = ch;
-      const mfx = maskFull.getContext('2d');
-      mfx.imageSmoothingEnabled = true; mfx.imageSmoothingQuality = 'high';
-      if(m2) mfx.drawImage(m2, bx, by, bw, bh);
-      else mfx.drawImage(m1, 0, 0, cw, ch);
-    } else {
-      maskFull = document.createElement('canvas');
-      maskFull.width = cw; maskFull.height = ch;
-      const mfx = maskFull.getContext('2d');
-      mfx.imageSmoothingEnabled = true; mfx.imageSmoothingQuality = 'high';
-      mfx.drawImage(m1, 0, 0, cw, ch);
-    }
-
-    const pc = document.createElement('canvas'); pc.width = cw; pc.height = ch;
-    const pctx = pc.getContext('2d');
-    pctx.drawImage(cur, 0, 0);
-    pctx.globalCompositeOperation = 'destination-in';
-    pctx.filter = 'blur(1.5px)';
-    pctx.drawImage(maskFull, 0, 0);
-    pctx.filter = 'none';
+    if(!pc) throw new Error('keine Person');
     const im2 = new Image();
     await new Promise((res, rej)=>{ im2.onload = res; im2.onerror = rej; im2.src = pc.toDataURL('image/png'); });
     if(img !== cur || loadSeq !== seqAt) return false;
