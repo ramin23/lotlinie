@@ -222,6 +222,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
       <div class="tiltmsg" id="tiltMsg"></div>
       <div class="row" style="margin:8px 0 12px">
         <button class="btn small" id="btnStraighten">Bild begradigen</button>
+        <button class="btn ghost small" id="btnTiltPlumb">Nur Soll-Linie kippen</button>
         <button class="btn ghost small" id="btnTiltIgnore">Ignorieren</button>
       </div>
     </div>
@@ -241,6 +242,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
     </div>
     <div class="row">
       <button class="btn small" id="btnKI">✨ Punkte per KI vorschlagen</button>
+      <button class="btn ghost small" id="btnBG" hidden>🪄 Hintergrund entfernen</button>
       <button class="btn ghost small" id="btnUndo">↶ Punkt zurück</button>
       <button class="btn ghost small" id="btnRestart">Punkte neu setzen</button>
       <button class="btn ghost small" id="btnReplace">Foto ersetzen</button>
@@ -299,7 +301,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 2.6 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 3.0 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -326,14 +328,14 @@ const SIDE_LM = [
   {id:'malleolus', name:'Außenknöchel',              short:'Knö',  hint:'Seitlicher Knöchel am Sprunggelenk.'}
 ];
 const PAIR_LM = (kopfName, kopfHint, kopfShort) => [
-  {id:'headL', name:kopfName + ' – linke Bildseite',  short:kopfShort, hint:kopfHint},
-  {id:'headR', name:kopfName + ' – rechte Bildseite', short:kopfShort, hint:kopfHint},
-  {id:'shL',  name:'Schulter – linke Bildseite',      short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
-  {id:'shR',  name:'Schulter – rechte Bildseite',     short:'Sch', hint:'Höchster Punkt der Schulter (Acromion).'},
-  {id:'hipL', name:'Beckenkamm – linke Bildseite',    short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
-  {id:'hipR', name:'Beckenkamm – rechte Bildseite',   short:'Bk',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
-  {id:'ankL', name:'Sprunggelenk – linke Bildseite',  short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'},
-  {id:'ankR', name:'Sprunggelenk – rechte Bildseite', short:'Sp',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'}
+  {id:'headL', name:kopfName + ' – linke Bildseite',  short:kopfShort+'L', hint:kopfHint},
+  {id:'headR', name:kopfName + ' – rechte Bildseite', short:kopfShort+'R', hint:kopfHint},
+  {id:'shL',  name:'Schulter – linke Bildseite',      short:'SchL', hint:'Höchster Punkt der Schulter (Acromion).'},
+  {id:'shR',  name:'Schulter – rechte Bildseite',     short:'SchR', hint:'Höchster Punkt der Schulter (Acromion).'},
+  {id:'hipL', name:'Beckenkamm – linke Bildseite',    short:'BkL',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+  {id:'hipR', name:'Beckenkamm – rechte Bildseite',   short:'BkR',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+  {id:'ankL', name:'Sprunggelenk – linke Bildseite',  short:'SpL',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'},
+  {id:'ankR', name:'Sprunggelenk – rechte Bildseite', short:'SpR',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'}
 ];
 const VIEWS = {
   front: {label:'Vorne',           family:'pairs', headKp:'eye', landmarks:PAIR_LM('Auge','Mitte der Pupille.','Au')},
@@ -352,6 +354,8 @@ let pts = {};                        // id -> {x,y} in Bildkoordinaten
 let state = 'empty';                 // empty | placing | done
 let placeOrder = [];                 // Reihenfolge der gesetzten Punkte (für Undo)
 let z = 1, tx = 0, ty = 0;           // Zoom & Verschiebung (CSS-Pixel)
+let plumbOff = 0;                    // Verschiebung der Soll-Linie (Bildpixel)
+let plumbTilt = 0;                   // Kippung der Soll-Linie (Grad) = Referenz-Senkrechte
 let tiltDeg = 0;                     // gemessene Schieflage (Grad, aus KI)
 let tiltHandled = false;             // Warnung bereits behandelt?
 let currentMetrics = [];
@@ -366,6 +370,16 @@ let cmpSel = [];                     // aktuell verglichene Sessions (sortiert)
 const activePtrs = new Map();        // pointerId -> {x,y}
 let gesture = null;                  // 'place' | 'move' | 'pan' | 'pinch' | 'dead'
 let gestureId = null, dragId = null, lastPos = null, moveOrig = null, pinchRef = null;
+let plumbGrabDX = 0;
+
+function plumbAnchorX(){
+  if(VIEWS[view].family === 'side') return pts.malleolus ? pts.malleolus.x : null;
+  return (pts.ankL && pts.ankR) ? (pts.ankL.x + pts.ankR.x)/2 : null;
+}
+function plumbAnchorY(){
+  if(VIEWS[view].family === 'side') return pts.malleolus ? pts.malleolus.y : null;
+  return (pts.ankL && pts.ankR) ? (pts.ankL.y + pts.ankR.y)/2 : null;
+}
 
 function nextTarget(){ return lm().find(l => !pts[l.id]) || null; }
 function placedCount(){ return lm().filter(l => pts[l.id]).length; }
@@ -410,7 +424,15 @@ function metricFor(p, name, norm, cmp, need, fn){
 function stOf(mag, warnAt, alertAt){ return mag <= warnAt ? 'ok' : mag <= alertAt ? 'warn' : 'alert'; }
 const stWord = {ok:'im Richtbereich', warn:'leicht auffällig', alert:'auffällig'};
 
-function computeMetricsFor(v, p){
+function refRotate(p, tiltRef){
+  const ang = -tiltRef * Math.PI / 180;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const o = {};
+  for(const k in p) o[k] = {x: p[k].x*c - p[k].y*s, y: p[k].x*s + p[k].y*c};
+  return o;
+}
+function computeMetricsFor(v, p, tiltRef = 0){
+  if(tiltRef) p = refRotate(p, tiltRef);
   const out = [];
   const fam = VIEWS[v].family;
   if(fam === 'side'){
@@ -504,7 +526,7 @@ function deltaInfo(cmp, oldV, newV){
 /* ============================================================
    Zeichnen – wiederverwendbar für Editor, Vergleich und Bericht
    ============================================================ */
-function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null){
+function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null, pOff = 0, interactive = false, pTilt = 0){
   const s = (cssW / srcW) * zz;
   c2.clearRect(0, 0, cssW, cssH);
   c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
@@ -522,18 +544,44 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
     c2.setLineDash([]);
   };
   const IST = '#0D9488';                                      /* Ist-Linien: kräftiges Türkis */
-  const plumbAt = x => seg({x, y:0}, {x, y:cssH}, '#E0301E', 2.5, [9,7]);   /* Soll: rot gestrichelt */
+  const plumbAt = (anchorX, anchorY) => {
+    const px = anchorX + pOff * s, py = anchorY;
+    const tr = pTilt * Math.PI / 180;
+    const dx = Math.sin(tr), dy = -Math.cos(tr);
+    const L = (cssW + cssH) * 2;
+    seg({x: px - dx*L, y: py - dy*L}, {x: px + dx*L, y: py + dy*L}, '#E0301E', 2.5, [9,7]);
+    if(interactive){
+      const onLine = yy => ({x: px + (yy - py)/dy * dx, y: yy});
+      const grip = (g, glyph) => {
+        c2.beginPath(); c2.arc(g.x, g.y, 13, 0, 7);
+        c2.fillStyle = 'rgba(255,255,255,.95)'; c2.fill();
+        c2.lineWidth = 2; c2.strokeStyle = '#E0301E'; c2.stroke();
+        c2.fillStyle = '#E0301E';
+        c2.font = '700 13px system-ui, sans-serif';
+        c2.fillText(glyph, g.x - 7, g.y + 4.5);
+      };
+      grip(onLine(cssH - 46), '⇄');
+      grip(onLine(42), '↻');
+      if(Math.abs(pTilt) > 0.2){
+        const g = onLine(42);
+        c2.font = '600 10px "IBM Plex Mono", monospace';
+        c2.fillStyle = 'rgba(21,36,48,.75)';
+        c2.fillText(pTilt.toFixed(1).replace('.', ',') + '°', g.x + 17, g.y + 4);
+      }
+    }
+  };
 
   if(VIEWS[v].family === 'side'){
     const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), c=P('c7'), tr=P('tragus');
-    if(m) plumbAt(m.x);
+    if(m) plumbAt(m.x, m.y);
     seg(m,k, IST, 3.5); seg(k,t, IST, 3.5); seg(t,a, IST, 3.5);
     seg(a,tr, IST, 3.5);                       /* durchgezogen bis zum Ohr */
     seg(c,tr, '#C77E14', 3.5);                 /* CVA-Messlinie obendrauf */
     if(c && tr){
       const facing = Math.sign((p.tragus.x - p.c7.x)) || 1;
-      seg(c, {x: c.x + 58*facing, y: c.y}, '#C77E14', 1.5, [4,4]);
-      const a0 = facing > 0 ? 0 : Math.PI;
+      const trr = pTilt * Math.PI / 180;
+      seg(c, {x: c.x + 58*Math.cos(trr)*facing, y: c.y + 58*Math.sin(trr)*facing}, '#C77E14', 1.5, [4,4]);
+      const a0 = (facing > 0 ? 0 : Math.PI) + trr;
       const a1 = Math.atan2(tr.y - c.y, tr.x - c.x);
       let diff = a1 - a0;
       while(diff >  Math.PI) diff -= 2*Math.PI;
@@ -546,7 +594,7 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
           bL=P('hipL'), bR=P('hipR'), aL=P('ankL'), aR=P('ankR');
     if(aL && aR){
       const mid = {x:(aL.x+aR.x)/2, y:(aL.y+aR.y)/2};
-      plumbAt(mid.x);
+      plumbAt(mid.x, mid.y);
       if(hL && hR) seg(mid, {x:(hL.x+hR.x)/2, y:(hL.y+hR.y)/2}, IST, 2.5);
       seg(aL,aR, IST, 3);
     }
@@ -621,7 +669,7 @@ async function loadFile(file){
   }
   iw = img.naturalWidth; ih = img.naturalHeight;
   pts = {}; placeOrder = []; state = 'placing'; editingId = null;
-  z = 1; tx = 0; ty = 0; kiMsgHide();
+  z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); tiltReset(); bgReset();
   $('sessDate').value = todayISO();
   $('emptyState').style.display = 'none';
   wrap.style.display = 'block';
@@ -664,7 +712,7 @@ function setView(v, silent){
   }
   if(!silent){
     pts = {}; placeOrder = []; editingId = null;
-    z = 1; tx = 0; ty = 0; kiMsgHide(); updateZoomChip(); tiltReset();
+    z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset(); bgReset(); bgReset();
     if(img){ state = 'placing'; render(); }
     updateGuide(); updateMetrics();
   }
@@ -715,7 +763,7 @@ function render(){
   const {w, h, dpr} = layout();
   clampPan(w, h);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty, state !== 'done', fmtDate($('sessDate').value || todayISO()));
+  paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty, state !== 'done', fmtDate($('sessDate').value || todayISO()), plumbOff, state === 'done', plumbTilt);
 }
 
 /* ---------- Lupe ---------- */
@@ -799,9 +847,31 @@ stage.addEventListener('pointerdown', e => {
       moveOrig = {x: pts[hit].x, y: pts[hit].y};
       lastPos = pos; pts[hit] = pos;
       showLoupe(); updateLoupe(pos); render();
-    } else if(z > 1.01){
-      gesture = 'pan'; gestureId = e.pointerId;
-      lastPos = {cx: e.clientX, cy: e.clientY};
+    } else {
+      const ax = plumbAnchorX(), ay = plumbAnchorY();
+      const r2 = stage.getBoundingClientRect();
+      const s2 = (r2.width / iw) * z;
+      if(ax !== null && ay !== null){
+        const scr = {x: e.clientX - r2.left, y: e.clientY - r2.top};
+        const pv = {x: ax*s2 + tx + plumbOff*s2, y: ay*s2 + ty};
+        const tr = plumbTilt * Math.PI / 180;
+        const dx = Math.sin(tr), dy = -Math.cos(tr);
+        const gTop = {x: pv.x + (42 - pv.y)/dy * dx, y: 42};
+        if(Math.hypot(scr.x - gTop.x, scr.y - gTop.y) < 26){
+          gesture = 'plumbRot'; gestureId = e.pointerId;
+          return;
+        }
+        const distToLine = Math.abs((scr.x - pv.x)*dy - (scr.y - pv.y)*dx);
+        if(distToLine < 16){
+          gesture = 'plumb'; gestureId = e.pointerId;
+          plumbGrabDX = pos.x - (ax + plumbOff);
+          return;
+        }
+      }
+      if(z > 1.01){
+        gesture = 'pan'; gestureId = e.pointerId;
+        lastPos = {cx: e.clientX, cy: e.clientY};
+      }
     }
   }
 });
@@ -832,6 +902,26 @@ stage.addEventListener('pointermove', e => {
   } else if(gesture === 'move'){
     lastPos = toImg(e); pts[dragId] = lastPos;
     render(); updateLoupe(lastPos);
+  } else if(gesture === 'plumb'){
+    const ax = plumbAnchorX();
+    if(ax !== null){
+      plumbOff = toImg(e).x - ax - plumbGrabDX;
+      render();
+    }
+  } else if(gesture === 'plumbRot'){
+    const ax = plumbAnchorX(), ay = plumbAnchorY();
+    if(ax !== null && ay !== null){
+      const r2 = stage.getBoundingClientRect();
+      const s2 = (r2.width / iw) * z;
+      const pv = {x: ax*s2 + tx + plumbOff*s2, y: ay*s2 + ty};
+      const scr = {x: e.clientX - r2.left, y: e.clientY - r2.top};
+      if(pv.y - scr.y > 40){
+        let t = deg(Math.atan2(scr.x - pv.x, pv.y - scr.y));
+        if(Math.abs(t) < 0.7) t = 0;
+        plumbTilt = Math.max(-20, Math.min(20, t));
+        render(); updateMetrics();
+      }
+    }
   } else if(gesture === 'pan'){
     tx += e.clientX - lastPos.cx; ty += e.clientY - lastPos.cy;
     lastPos = {cx: e.clientX, cy: e.clientY};
@@ -877,11 +967,12 @@ function updateGuide(){
     $('guideStep').textContent = `${VIEWS[view].label} · vollständig`;
     $('guideName').textContent = 'Fertig – Punkte prüfen';
     $('guideHint').textContent = exam
-      ? 'Sitzt ein Punkt falsch: antippen und ziehen. Dann „Speichern & weiter".'
-      : 'Sitzt ein Punkt falsch: antippen und ziehen. Dann unten zur Verlaufsliste hinzufügen.';
+      ? 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann „Speichern & weiter".'
+      : 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann sichern.';
   }
   $('btnUndo').disabled = placeOrder.length === 0;
   $('btnKI').hidden = !(img && state === 'placing' && placedCount() === 0);
+  $('btnBG').hidden = !img;
   $('quickRow').hidden = !(!exam && img && state === 'done');
   $('btnQuickSave').textContent = quickSaveLabel();
   updateAddBtn(); updateExamUI();
@@ -900,7 +991,7 @@ $('btnRestart').addEventListener('click', ()=>{
 
 /* ---------- Messwert-Anzeige ---------- */
 function updateMetrics(){
-  currentMetrics = computeMetricsFor(view, pts);
+  currentMetrics = computeMetricsFor(view, pts, plumbTilt);
   $('metricsList').innerHTML = currentMetrics.map(m => `
     <div class="metric ${m.available ? '' : 'miss'}">
       <div>
@@ -952,7 +1043,7 @@ function snapshotSession(){
     patient: $('patient').value.trim(),
     view, notes: $('notes').value.trim(),
     imgData: oc.toDataURL('image/jpeg', 0.85),
-    iw: w, ih: h, pts: p2
+    iw: w, ih: h, pts: p2, plumbOff: plumbOff * k, plumbTilt
   };
 }
 function sortedSessions(){
@@ -1050,6 +1141,9 @@ function loadSession(s){
     setView(s.view, true);
     view = s.view;
     placeOrder = VIEWS[s.view].landmarks.filter(l => pts[l.id]).map(l => l.id);
+    plumbOff = s.plumbOff || 0;
+    plumbTilt = s.plumbTilt || 0;
+    bgReset();
     state = nextTarget() ? 'placing' : 'done';
     z = 1; tx = 0; ty = 0; updateZoomChip(); kiMsgHide();
     editingId = s.id;
@@ -1176,7 +1270,7 @@ $('btnCompare').addEventListener('click', async ()=>{
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr,0,0,dpr,0,0);
-    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr));
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
   }));
 
   /* Tabelle */
@@ -1189,7 +1283,7 @@ $('btnCompare').addEventListener('click', async ()=>{
 });
 
 function buildCompareTable(sel, v, tableEl, forPrint){
-  const per = sel.map(s => computeMetricsFor(s.view, s.pts));
+  const per = sel.map(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0));
   const head = `<thead><tr><th>Messwert</th>`
     + sel.map(s => `<th>${fmtDate(s.dateStr)}</th>`).join('')
     + `<th>Veränderung</th></tr></thead>`;
@@ -1219,7 +1313,7 @@ $('btnCmpClose').addEventListener('click', ()=>{
 $('btnReport').addEventListener('click', ()=>{
   const rw = Math.min(900, iw), rh = Math.round(rw * ih / iw);
   const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh, 1, 0, 0, false, fmtDate($('sessDate').value || todayISO()));
+  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh, 1, 0, 0, false, fmtDate($('sessDate').value || todayISO()), plumbOff, false, plumbTilt);
   const shot = oc.toDataURL('image/jpeg', 0.92);
   const name = $('patient').value.trim() || '—';
   const notes = $('notes').value.trim();
@@ -1260,7 +1354,7 @@ $('btnCmpReport').addEventListener('click', async ()=>{
     const w = Math.min(900, s.iw);
     const h = Math.round(w * s.ih / s.iw);
     const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
-    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h, 1, 0, 0, false, fmtDate(s.dateStr));
+    paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, w, h, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
     return oc.toDataURL('image/jpeg', 0.9);
   }));
   const perRow = Math.min(sel.length, 3);
@@ -1470,7 +1564,7 @@ function updateExamUI(){
 
 function resetToEmpty(){
   img = null; pts = {}; placeOrder = []; state = 'empty';
-  z = 1; tx = 0; ty = 0; kiMsgHide(); updateZoomChip();
+  z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset();
   wrap.style.display = 'none';
   $('guideBar').style.display = 'none';
   $('resultsCard').style.display = 'none';
@@ -1543,7 +1637,7 @@ async function buildPreview(ids){
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr));
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
   }));
   $('previewCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -1579,7 +1673,7 @@ function ensurePDFLib(){
   return pdfLibPromise;
 }
 function shortEval(s){
-  const ms = computeMetricsFor(s.view, s.pts).filter(m => m.available);
+  const ms = computeMetricsFor(s.view, s.pts, s.plumbTilt || 0).filter(m => m.available);
   if(!ms.length) return VIEWS[s.view].label + ': keine Messwerte.';
   const bad = ms.filter(m => m.st !== 'ok');
   if(!bad.length) return VIEWS[s.view].label + ': unauffällig.';
@@ -1606,23 +1700,16 @@ $('btnExamPDF').addEventListener('click', async ()=>{
     doc.text(`Patient·in: ${pat}     Datum: ${fmtDate(sel[0].dateStr)}     Erstellt: ${fmtDate(todayISO())}, ${nowTime()} Uhr`, M, 24);
     doc.setTextColor(0);
 
-    const n = sel.length, gap = 4;
-    const cellW = (W - 2*M - (n-1)*gap) / n;
     const imgTop = 30, maxH = 92;
-    let x = M;
+    const items = [];
     for(const s of sel){
       const im = await ensureImg(s);
       const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr));
-      const data = oc.toDataURL('image/jpeg', 0.88);
-      let h = maxH, w = h * s.iw / s.ih;
-      if(w > cellW){ w = cellW; h = w * s.ih / s.iw; }
-      doc.addImage(data, 'JPEG', x + (cellW - w)/2, imgTop + (maxH - h)/2, w, h);
-      doc.setFontSize(8); doc.setTextColor(90);
-      doc.text(VIEWS[s.view].label, x + cellW/2, imgTop + maxH + 4, {align:'center'});
-      x += cellW + gap;
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: VIEWS[s.view].label});
     }
+    pdfImageRow(doc, items, imgTop, maxH, M, W);
 
     let y = imgTop + maxH + 13;
     doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(11);
@@ -1634,7 +1721,7 @@ $('btnExamPDF').addEventListener('click', async ()=>{
       y += lines.length * 4.6 + 1.5;
     }
     y += 3;
-    const anyBad = sel.some(s => computeMetricsFor(s.view, s.pts).some(m => m.available && m.st !== 'ok'));
+    const anyBad = sel.some(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0).some(m => m.available && m.st !== 'ok'));
     doc.setFont('helvetica','bold');
     doc.text(anyBad
       ? 'Gesamteindruck: einzelne auffällige Werte (siehe oben) – Verlauf beobachten.'
@@ -1675,29 +1762,22 @@ $('btnCmpPDF').addEventListener('click', async ()=>{
     doc.text(`Patient·in: ${pat}     Ansicht: ${VIEWS[v].label}     Zeitraum: ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}`, M, 24);
     doc.setTextColor(0);
 
-    const n = sel.length, gap = 4;
-    const cellW = (W - 2*M - (n-1)*gap) / n;
     const imgTop = 30, maxH = 104;
-    let x = M;
+    const items = [];
     for(const s of sel){
       const im = await ensureImg(s);
       const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr));
-      const data = oc.toDataURL('image/jpeg', 0.88);
-      let h = maxH, w = h * s.iw / s.ih;
-      if(w > cellW){ w = cellW; h = w * s.ih / s.iw; }
-      doc.addImage(data, 'JPEG', x + (cellW - w)/2, imgTop + (maxH - h)/2, w, h);
-      doc.setFontSize(8); doc.setTextColor(90);
-      doc.text(fmtDate(s.dateStr), x + cellW/2, imgTop + maxH + 4, {align:'center'});
-      x += cellW + gap;
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
     }
+    pdfImageRow(doc, items, imgTop, maxH, M, W);
 
     let y = imgTop + maxH + 13;
     doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(11);
     doc.text('Veränderung (von ältester zu neuester Aufnahme)', M, y); y += 6;
     doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
-    const per = sel.map(s => computeMetricsFor(s.view, s.pts));
+    const per = sel.map(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0));
     per[0].forEach((m0, mi)=>{
       const a = per[0][mi], b = per[per.length - 1][mi];
       let line;
@@ -1774,7 +1854,7 @@ function straightenImage(){
   const im2 = new Image();
   im2.onload = ()=>{
     img = im2; iw = im2.naturalWidth; ih = im2.naturalHeight; pts = np;
-    z = 1; tx = 0; ty = 0; tiltReset(); updateZoomChip();
+    z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; tiltReset(); bgReset(); updateZoomChip();
     render(); updateMetrics(); updateGuide();
   };
   im2.src = oc.toDataURL('image/jpeg', 0.92);
@@ -1782,6 +1862,33 @@ function straightenImage(){
 window.__setTilt = (d)=>{ tiltDeg = d; $('tiltMsg').textContent = 'Testmodus'; $('tiltWarn').hidden = false; };
 $('btnStraighten').addEventListener('click', straightenImage);
 $('btnTiltIgnore').addEventListener('click', ()=>{ tiltHandled = true; $('tiltWarn').hidden = true; });
+$('btnTiltPlumb').addEventListener('click', ()=>{
+  plumbTilt = Math.max(-20, Math.min(20, tiltDeg));
+  tiltHandled = true; $('tiltWarn').hidden = true;
+  render(); updateMetrics();
+});
+
+/* Bildreihe im PDF: Bilder direkt aneinander, als Gruppe zentriert */
+function pdfImageRow(doc, items, yTop, maxH, M, W, gap = 3){
+  const usable = W - 2*M;
+  let hUse = maxH;
+  let ws = items.map(it => maxH * it.ar);
+  let total = ws.reduce((a,b)=> a+b, 0) + gap*(items.length - 1);
+  if(total > usable){
+    const f = (usable - gap*(items.length - 1)) / (total - gap*(items.length - 1));
+    ws = ws.map(w => w*f); hUse = maxH * f; total = usable;
+  }
+  let x = M + (usable - total)/2;
+  for(let i = 0; i < items.length; i++){
+    doc.addImage(items[i].data, 'JPEG', x, yTop + (maxH - hUse)/2, ws[i], hUse);
+    if(items[i].label){
+      doc.setFontSize(8); doc.setTextColor(90);
+      doc.text(items[i].label, x + ws[i]/2, yTop + maxH + 4, {align:'center'});
+    }
+    x += ws[i] + gap;
+  }
+  doc.setTextColor(0);
+}
 
 /* Untersuchungs-Vergleich: für jede Ansicht alt/neu nebeneinander, ein PDF */
 async function buildExamComparePDF(sel, dates){
@@ -1810,23 +1917,20 @@ async function buildExamComparePDF(sel, dates){
       if(y + secH + 34 > 280){ doc.addPage(); y = 18; }
       doc.setFont('helvetica','bold'); doc.setFontSize(11);
       doc.text(VIEWS[v].label, M, y); y += 4;
-      const gap = 4, cellW = (W - 2*M - gap) / 2, imgH = 78;
-      let x = M;
+      const imgH = 78;
+      const items = [];
       for(const s of [a, b]){
         const im = await ensureImg(s);
         const rw = Math.min(600, s.iw), rh = Math.round(rw * s.ih / s.iw);
         const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr));
-        let h = imgH, w = h * s.iw / s.ih;
-        if(w > cellW){ w = cellW; h = w * s.ih / s.iw; }
-        doc.addImage(oc.toDataURL('image/jpeg', 0.85), 'JPEG', x + (cellW - w)/2, y + (imgH - h)/2, w, h);
-        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(90);
-        doc.text(fmtDate(s.dateStr), x + cellW/2, y + imgH + 3.5, {align:'center'});
-        x += cellW + gap;
+        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+        items.push({data: oc.toDataURL('image/jpeg', 0.85), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
       }
+      doc.setFont('helvetica','normal');
+      pdfImageRow(doc, items, y, imgH, M, W);
       y += imgH + 8;
       doc.setTextColor(0); doc.setFontSize(8.5);
-      const ma = computeMetricsFor(v, a.pts), mb = computeMetricsFor(v, b.pts);
+      const ma = computeMetricsFor(v, a.pts, a.plumbTilt || 0), mb = computeMetricsFor(v, b.pts, b.plumbTilt || 0);
       ma.forEach((m0, mi)=>{
         if(!(m0.available && mb[mi].available)) return;
         const d = deltaInfo(m0.cmp, m0.val, mb[mi].val);
@@ -1852,8 +1956,85 @@ async function buildExamComparePDF(sel, dates){
   }
 }
 
+/* ============================================================
+   Hintergrund entfernen: Person freistellen (Beta). Nutzt ein
+   Segmentierungsmodell im Browser; das Original bleibt per
+   Knopfdruck wiederherstellbar.
+   ============================================================ */
+let segPromise = null, imgOriginal = null;
+function bgReset(){
+  imgOriginal = null;
+  const b = $('btnBG');
+  if(b){ b.textContent = '🪄 Hintergrund entfernen'; b.disabled = false; }
+}
+function ensureSegmenter(){
+  if(segPromise) return segPromise;
+  segPromise = (async ()=>{
+    if(!window.tf) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js');
+    if(!window.bodySegmentation) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation@1.0.2/dist/body-segmentation.min.js');
+    return await bodySegmentation.createSegmenter(
+      bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation,
+      {runtime: 'tfjs', modelType: 'general'});
+  })();
+  segPromise.catch(()=>{ segPromise = null; });
+  return segPromise;
+}
+$('btnBG').addEventListener('click', async ()=>{
+  const btn = $('btnBG');
+  if(imgOriginal){                       /* Original zurück */
+    img = imgOriginal; imgOriginal = null;
+    btn.textContent = '🪄 Hintergrund entfernen';
+    render();
+    kiMsgShow('Original-Hintergrund wiederhergestellt.');
+    return;
+  }
+  if(!img) return;
+  btn.disabled = true;
+  try{
+    btn.textContent = 'Modell lädt …';
+    const seg = await ensureSegmenter();
+    btn.textContent = 'Person wird freigestellt …';
+    const maxE = 768, k = Math.min(1, maxE / Math.max(iw, ih));
+    const sw = Math.round(iw*k), sh = Math.round(ih*k);
+    const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
+    sc.getContext('2d').drawImage(img, 0, 0, sw, sh);
+    const people = await seg.segmentPeople(sc);
+    if(!people || !people.length) throw new Error('keine Person');
+    const maskData = await bodySegmentation.toBinaryMask(people,
+      {r:255, g:255, b:255, a:255}, {r:0, g:0, b:0, a:0}, false, 0.55);
+    const mc = document.createElement('canvas'); mc.width = sw; mc.height = sh;
+    mc.getContext('2d').putImageData(maskData, 0, 0);
+    /* Person voll aufgelöst ausstanzen, weiche Kante */
+    const pc = document.createElement('canvas'); pc.width = iw; pc.height = ih;
+    const pctx = pc.getContext('2d');
+    pctx.drawImage(img, 0, 0);
+    pctx.globalCompositeOperation = 'destination-in';
+    pctx.filter = 'blur(' + Math.max(1, Math.round(2/k)) + 'px)';
+    pctx.drawImage(mc, 0, 0, iw, ih);
+    pctx.filter = 'none';
+    const oc = document.createElement('canvas'); oc.width = iw; oc.height = ih;
+    const octx = oc.getContext('2d');
+    octx.fillStyle = '#E9EDEB';
+    octx.fillRect(0, 0, iw, ih);
+    octx.drawImage(pc, 0, 0);
+    const im2 = new Image();
+    im2.onload = ()=>{
+      imgOriginal = img; img = im2;
+      btn.disabled = false;
+      btn.textContent = '↩ Hintergrund wiederherstellen';
+      render();
+      kiMsgShow('Hintergrund entfernt – Ränder kurz prüfen. Gleicher Knopf stellt das Original wieder her.');
+    };
+    im2.src = oc.toDataURL('image/jpeg', 0.92);
+  }catch(err){
+    btn.disabled = false;
+    btn.textContent = '🪄 Hintergrund entfernen';
+    kiMsgShow('Keine Person sicher erkannt oder Modell nicht verfügbar – Hintergrund bleibt unverändert.');
+  }
+});
+
 /* Debug-Schnittstelle für automatisierte Tests */
-window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg,
+window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt,
   placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
 
 /* ---------- Sonstiges ---------- */
