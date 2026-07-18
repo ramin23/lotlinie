@@ -191,12 +191,17 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <!-- Leerer Zustand -->
   <div class="card" id="emptyState">
+    <h3 id="emptyTitle">Neue Analyse</h3>
+    <p id="emptySub">Der geführte Ablauf nimmt alle 4 Ansichten nacheinander auf – Vorne, Rechts, Hinten, Links.</p>
     <button class="btn block" id="btnExam" style="margin-bottom:14px">🩺 Untersuchung starten (4 Ansichten)</button>
-    <h3 id="emptyTitle">Einzelaufnahme: Foto aufnehmen</h3>
-    <p id="emptySub">Ganzkörperaufnahme von Kopf bis Fuß.</p>
-    <div class="btnrow">
-      <button class="btn" id="btnCam">📷 Foto aufnehmen</button>
-      <button class="btn ghost" id="btnGal">Aus Galerie</button>
+    <button class="btn ghost small" id="btnSingle" style="display:block;margin:0 auto">Einzelne Ansicht ohne geführten Ablauf ▸</button>
+    <div id="photoRow" hidden>
+      <p style="font-size:12.5px;color:var(--ink2);margin:12px 0 10px">Ohne automatisches Weiterschalten –
+      für schnelle Einzelchecks oder Nachbearbeitung. Ansicht oben über die Tabs wählen.</p>
+      <div class="btnrow">
+        <button class="btn" id="btnCam">📷 Foto aufnehmen</button>
+        <button class="btn ghost" id="btnGal">Aus Galerie</button>
+      </div>
     </div>
     <div class="tips">
       <b>Aufnahme-Tipps:</b> Kamera auf Brusthöhe und gerade halten · neutraler Stand, Blick geradeaus ·
@@ -301,7 +306,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 3.2 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 3.4 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -354,6 +359,7 @@ let state = 'empty';                 // empty | placing | done
 let placeOrder = [];                 // Reihenfolge der gesetzten Punkte (für Undo)
 let z = 1, tx = 0, ty = 0;           // Zoom & Verschiebung (CSS-Pixel)
 let imgAlpha = false;                // Bild ist freigestellt (transparenter Hintergrund)
+let loadSeq = 0;                     // Ladefolge: entwertet laufende Auto-Verarbeitung
 let plumbOff = 0;                    // Verschiebung der Soll-Linie (Bildpixel)
 let plumbTilt = 0;                   // Kippung der Soll-Linie (Grad) = Referenz-Senkrechte
 let tiltDeg = 0;                     // gemessene Schieflage (Grad, aus KI)
@@ -659,6 +665,7 @@ async function loadFile(file){
     return;
   }
   iw = img.naturalWidth; ih = img.naturalHeight;
+  loadSeq++;
   pts = {}; placeOrder = []; state = 'placing'; editingId = null;
   z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); tiltReset(); bgReset();
   $('sessDate').value = todayISO();
@@ -668,7 +675,7 @@ async function loadFile(file){
   $('resultsCard').style.display = 'block';
   render(); updateGuide(); updateMetrics();
   prewarmKI();
-  if(AUTO_KI) runKI();      /* Punkte direkt vorschlagen – nur noch korrigieren */
+  if(AUTO_KI) autoPrep();   /* erst freistellen, dann Punkte vorschlagen */
 }
 function guardUnsavedPhoto(){
   if(img && state === 'done' && !exam){
@@ -950,12 +957,14 @@ function updateGuide(){
   $('guideDots').innerHTML = list.map(l=>`<i class="${pts[l.id] ? 'on':''}"></i>`).join('');
   const nt = nextTarget();
   if(state === 'placing' && nt){
-    $('guideStep').textContent = `Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
+    const modus = exam ? `Untersuchung ${exam.idx+1}/4` : 'Einzelaufnahme';
+    $('guideStep').textContent = `${modus} · Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
     $('guideName').textContent = `Tippe auf: ${nt.name}`;
     $('guideHint').textContent = nt.hint + ' Finger gedrückt halten und mit der Lupe fein ausrichten, dann loslassen. Zwei Finger: zoomen.';
   } else if(state === 'done'){
     kiMsgHide();
-    $('guideStep').textContent = `${VIEWS[view].label} · vollständig`;
+    const modus = exam ? `Untersuchung ${exam.idx+1}/4` : 'Einzelaufnahme';
+    $('guideStep').textContent = `${modus} · ${VIEWS[view].label} · vollständig`;
     $('guideName').textContent = 'Fertig – Punkte prüfen';
     $('guideHint').textContent = exam
       ? 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann „Speichern & weiter".'
@@ -1539,21 +1548,28 @@ $('btnKI').addEventListener('click', runKI);
    ============================================================ */
 let previewIds = [];
 
+let singleOpen = false;
 function updateExamUI(){
   const on = !!exam;
   $('btnExam').hidden = on;
   $('examRow').hidden = !on;
+  $('btnSingle').hidden = on || singleOpen;
+  $('photoRow').hidden = !(on || singleOpen);
   if(on) $('btnExamNext').disabled = !(img && state === 'done');
   if(on && !img){
     $('emptyTitle').textContent = `Ansicht ${exam.idx+1} von 4 · ${VIEWS[EXAM_ORDER[exam.idx]].label}`;
     $('emptySub').textContent = 'Foto aufnehmen oder auswählen – die KI setzt die Punkte vor, du korrigierst nur.';
   } else if(!on){
-    $('emptyTitle').textContent = 'Einzelaufnahme: Foto aufnehmen';
-    $('emptySub').textContent = 'Ganzkörperaufnahme von Kopf bis Fuß.';
+    $('emptyTitle').textContent = 'Neue Analyse';
+    $('emptySub').textContent = 'Der geführte Ablauf nimmt alle 4 Ansichten nacheinander auf – Vorne, Rechts, Hinten, Links.';
   }
 }
+$('btnSingle').addEventListener('click', ()=>{
+  singleOpen = true; updateExamUI();
+});
 
 function resetToEmpty(){
+  singleOpen = false;
   img = null; pts = {}; placeOrder = []; state = 'empty';
   z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset();
   wrap.style.display = 'none';
@@ -1970,6 +1986,51 @@ function ensureSegmenter(){
   segPromise.catch(()=>{ segPromise = null; });
   return segPromise;
 }
+async function removeBackgroundCore(silent){
+  if(!img || imgOriginal) return false;              /* schon freigestellt */
+  const cur = img, seqAt = loadSeq, cw = iw, ch = ih;
+  const btn = $('btnBG');
+  btn.disabled = true;
+  try{
+    btn.textContent = silent ? 'Hintergrund wird entfernt …' : 'Modell lädt …';
+    const seg = await ensureSegmenter();
+    if(img !== cur || loadSeq !== seqAt) return false;
+    btn.textContent = 'Person wird freigestellt …';
+    const maxE = 768, k = Math.min(1, maxE / Math.max(cw, ch));
+    const sw = Math.round(cw*k), sh = Math.round(ch*k);
+    const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
+    sc.getContext('2d').drawImage(cur, 0, 0, sw, sh);
+    const people = await seg.segmentPeople(sc);
+    if(img !== cur || loadSeq !== seqAt) return false;
+    if(!people || !people.length) throw new Error('keine Person');
+    const maskData = await bodySegmentation.toBinaryMask(people,
+      {r:255, g:255, b:255, a:255}, {r:0, g:0, b:0, a:0}, false, 0.55);
+    const mc = document.createElement('canvas'); mc.width = sw; mc.height = sh;
+    mc.getContext('2d').putImageData(maskData, 0, 0);
+    const pc = document.createElement('canvas'); pc.width = cw; pc.height = ch;
+    const pctx = pc.getContext('2d');
+    pctx.drawImage(cur, 0, 0);
+    pctx.globalCompositeOperation = 'destination-in';
+    pctx.filter = 'blur(' + Math.max(1, Math.round(2/k)) + 'px)';
+    pctx.drawImage(mc, 0, 0, cw, ch);
+    pctx.filter = 'none';
+    const im2 = new Image();
+    await new Promise((res, rej)=>{ im2.onload = res; im2.onerror = rej; im2.src = pc.toDataURL('image/png'); });
+    if(img !== cur || loadSeq !== seqAt) return false;
+    imgOriginal = cur; img = im2; imgAlpha = true;
+    btn.textContent = '↩ Hintergrund wiederherstellen';
+    render();
+    if(!silent) kiMsgShow('Hintergrund entfernt (transparent) – Ränder kurz prüfen. Gleicher Knopf stellt das Original wieder her.');
+    return true;
+  }catch(err){
+    if(!silent) kiMsgShow('Keine Person sicher erkannt oder Modell nicht verfügbar – Hintergrund bleibt unverändert.');
+    return false;
+  }finally{
+    btn.disabled = false;
+    if(!imgOriginal) btn.textContent = '🪄 Hintergrund entfernen';
+  }
+}
+
 $('btnBG').addEventListener('click', async ()=>{
   const btn = $('btnBG');
   if(imgOriginal){                       /* Original zurück */
@@ -1979,45 +2040,16 @@ $('btnBG').addEventListener('click', async ()=>{
     kiMsgShow('Original-Hintergrund wiederhergestellt.');
     return;
   }
-  if(!img) return;
-  btn.disabled = true;
-  try{
-    btn.textContent = 'Modell lädt …';
-    const seg = await ensureSegmenter();
-    btn.textContent = 'Person wird freigestellt …';
-    const maxE = 768, k = Math.min(1, maxE / Math.max(iw, ih));
-    const sw = Math.round(iw*k), sh = Math.round(ih*k);
-    const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
-    sc.getContext('2d').drawImage(img, 0, 0, sw, sh);
-    const people = await seg.segmentPeople(sc);
-    if(!people || !people.length) throw new Error('keine Person');
-    const maskData = await bodySegmentation.toBinaryMask(people,
-      {r:255, g:255, b:255, a:255}, {r:0, g:0, b:0, a:0}, false, 0.55);
-    const mc = document.createElement('canvas'); mc.width = sw; mc.height = sh;
-    mc.getContext('2d').putImageData(maskData, 0, 0);
-    /* Person voll aufgelöst ausstanzen, weiche Kante */
-    const pc = document.createElement('canvas'); pc.width = iw; pc.height = ih;
-    const pctx = pc.getContext('2d');
-    pctx.drawImage(img, 0, 0);
-    pctx.globalCompositeOperation = 'destination-in';
-    pctx.filter = 'blur(' + Math.max(1, Math.round(2/k)) + 'px)';
-    pctx.drawImage(mc, 0, 0, iw, ih);
-    pctx.filter = 'none';
-    const im2 = new Image();
-    im2.onload = ()=>{
-      imgOriginal = img; img = im2; imgAlpha = true;
-      btn.disabled = false;
-      btn.textContent = '↩ Hintergrund wiederherstellen';
-      render();
-      kiMsgShow('Hintergrund entfernt (transparent) – Ränder kurz prüfen. Gleicher Knopf stellt das Original wieder her.');
-    };
-    im2.src = pc.toDataURL('image/png');
-  }catch(err){
-    btn.disabled = false;
-    btn.textContent = '🪄 Hintergrund entfernen';
-    kiMsgShow('Keine Person sicher erkannt oder Modell nicht verfügbar – Hintergrund bleibt unverändert.');
-  }
+  removeBackgroundCore(false);
 });
+
+/* Auto-Pipeline beim Foto-Laden: erst freistellen, dann KI-Punkte */
+async function autoPrep(){
+  const seqAt = loadSeq;
+  try{ await removeBackgroundCore(true); }catch(_){}
+  if(loadSeq !== seqAt) return;          /* inzwischen neues Foto geladen */
+  runKI();
+}
 
 /* Debug-Schnittstelle für automatisierte Tests */
 window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt, imgAlpha,
