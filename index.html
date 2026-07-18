@@ -81,10 +81,15 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 @keyframes lspin{to{transform:rotate(360deg)}}
 #busy .bt{color:#fff;font-size:13px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.45)}
 #lmHelp{position:absolute;top:10px;right:10px;z-index:5;width:94px;pointer-events:none;
+  transition:left .15s ease, top .15s ease;
   background:rgba(255,255,255,.96);border:2px solid var(--petrol);border-radius:12px;
   padding:7px 7px 5px;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
 #lmHelpArt svg{width:100%;height:auto;display:block}
 #lmHelpCap{font-size:10px;font-weight:700;color:var(--ink);margin-top:3px;line-height:1.25}
+#lmHelp::before{content:'';position:absolute;top:50%;width:12px;height:12px;background:#fff;
+  border:2px solid var(--petrol);transform:translateY(-50%) rotate(45deg);display:none}
+#lmHelp.pl::before{display:block;left:-8px;border-right:0;border-top:0}
+#lmHelp.pr::before{display:block;right:-8px;border-left:0;border-bottom:0}
 
 #guideBar{display:none;background:var(--petrol-t);border:1px solid rgba(15,118,110,.25)}
 #guideBar .step{font-size:11.5px;letter-spacing:.08em;font-weight:600;color:var(--petrol-d);text-transform:uppercase}
@@ -319,7 +324,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 3.6 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 3.7 · Stand 18.07.2026</div>
 </main>
 </div>
 
@@ -373,6 +378,7 @@ let placeOrder = [];                 // Reihenfolge der gesetzten Punkte (für U
 let z = 1, tx = 0, ty = 0;           // Zoom & Verschiebung (CSS-Pixel)
 let imgAlpha = false;                // Bild ist freigestellt (transparenter Hintergrund)
 let loadSeq = 0;                     // Ladefolge: entwertet laufende Auto-Verarbeitung
+let kiHints = {};                    // grobe KI-Positionen als Anker für die Setz-Hilfe
 let plumbOff = 0;                    // Verschiebung der Soll-Linie (Bildpixel)
 let plumbTilt = 0;                   // Kippung der Soll-Linie (Grad) = Referenz-Senkrechte
 let tiltDeg = 0;                     // gemessene Schieflage (Grad, aus KI)
@@ -687,7 +693,7 @@ async function loadFile(file){
     wc.getContext('2d').drawImage(img, 0, 0, wc.width, wc.height);
     img = wc; iw = wc.width; ih = wc.height;
   }
-  loadSeq++;
+  loadSeq++; kiHints = {};
   pts = {}; placeOrder = []; state = 'placing'; editingId = null;
   z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); tiltReset(); bgReset();
   $('sessDate').value = todayISO();
@@ -731,7 +737,7 @@ function setView(v, silent){
     b.setAttribute('aria-selected', on);
   }
   if(!silent){
-    pts = {}; placeOrder = []; editingId = null;
+    pts = {}; placeOrder = []; editingId = null; kiHints = {};
     z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset(); bgReset(); bgReset();
     if(img){ state = 'placing'; render(); }
     updateGuide(); updateMetrics();
@@ -784,6 +790,7 @@ function render(){
   clampPan(w, h);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty, state !== 'done', fmtDate($('sessDate').value || todayISO()), plumbOff, state === 'done', plumbTilt);
+  placeLmHelpBox();
 }
 
 /* ---------- Lade-Anzeige ---------- */
@@ -813,14 +820,42 @@ function helpKeyFor(l){
   if(l.id === 'ankL' || l.id === 'ankR') return 'ankF';
   return LM_HELP[l.id] ? l.id : null;
 }
-function showLmHelp(l){
+let lmAnchor = null;
+function showLmHelp(l, anchor){
   const k = helpKeyFor(l);
-  if(!k){ $('lmHelp').hidden = true; return; }
+  if(!k){ $('lmHelp').hidden = true; lmAnchor = null; return; }
   $('lmHelpArt').innerHTML = LM_HELP[k];
   $('lmHelpCap').textContent = l.short + ' – roter Punkt';
+  lmAnchor = anchor || null;
   $('lmHelp').hidden = false;
+  placeLmHelpBox();
 }
-function hideLmHelp(){ $('lmHelp').hidden = true; }
+function hideLmHelp(){ $('lmHelp').hidden = true; lmAnchor = null; }
+
+/* Karte neben die echte Körperstelle setzen (Pfeil zeigt hin) */
+function placeLmHelpBox(){
+  const box = $('lmHelp');
+  if(box.hidden) return;
+  box.classList.remove('pl','pr');
+  if(!lmAnchor || !img){
+    box.style.left = 'auto'; box.style.right = '10px'; box.style.top = '10px';
+    return;
+  }
+  const wr = wrap.getBoundingClientRect();
+  const r = stage.getBoundingClientRect();
+  const s2 = (r.width / iw) * z;
+  const ax = lmAnchor.x*s2 + tx + (r.left - wr.left);
+  const ay = lmAnchor.y*s2 + ty + (r.top  - wr.top);
+  const bw = box.offsetWidth || 94, bh2 = box.offsetHeight || 118;
+  let left = ax + 28, cls = 'pl';
+  if(left + bw > wr.width - 6){ left = ax - 28 - bw; cls = 'pr'; }
+  left = Math.max(6, Math.min(wr.width - bw - 6, left));
+  const top = Math.max(8, Math.min(wr.height - bh2 - 8, ay - bh2/2));
+  box.style.right = 'auto';
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
+  box.classList.add(cls);
+}
 
 /* ---------- Lupe ---------- */
 function showLoupe(){ loupe.style.display = 'block'; }
@@ -902,7 +937,7 @@ stage.addEventListener('pointerdown', e => {
       gesture = 'move'; gestureId = e.pointerId; dragId = hit;
       moveOrig = {x: pts[hit].x, y: pts[hit].y};
       lastPos = pos; pts[hit] = pos;
-      showLmHelp(lm().find(x => x.id === hit));
+      showLmHelp(lm().find(x => x.id === hit), moveOrig);
       showLoupe(); updateLoupe(pos); render();
     } else {
       const ax = plumbAnchorX(), ay = plumbAnchorY();
@@ -1018,7 +1053,7 @@ function updateGuide(){
   if(state === 'placing' && nt){
     const modus = exam ? `Untersuchung ${exam.idx+1}/4` : 'Einzelaufnahme';
     $('guideStep').textContent = `${modus} · Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
-    showLmHelp(nt);
+    showLmHelp(nt, kiHints[nt.id] || null);
     $('guideName').textContent = `Tippe auf: ${nt.name}`;
     $('guideHint').textContent = nt.hint + ' Finger gedrückt halten und mit der Lupe fein ausrichten, dann loslassen. Zwei Finger: zoomen.';
   } else if(state === 'done'){
@@ -1550,6 +1585,32 @@ async function runKI(){
       const c = (A && B) ? (A.score >= B.score ? A : B) : (A || B);
       return (c && c.score >= MIN) ? {x: c.x, y: c.y} : null;
     };
+    /* grobe Anker für die Setz-Hilfe (auch unsichere Treffer) */
+    kiHints = {};
+    const gh = n => (kp[n] && kp[n].score >= 0.1) ? {x: kp[n].x, y: kp[n].y} : null;
+    const bh = (a, b)=>{ const A = gh(a), B = gh(b);
+      return A && B ? (kp[a].score >= kp[b].score ? A : B) : (A || B); };
+    if(VIEWS[view].family === 'side'){
+      kiHints.tragus = bh('left_ear','right_ear');
+      kiHints.acromion = bh('left_shoulder','right_shoulder');
+      kiHints.trochanter = bh('left_hip','right_hip');
+      kiHints.knee = bh('left_knee','right_knee');
+      kiHints.malleolus = bh('left_ankle','right_ankle');
+    } else {
+      const hp = (nl, nr, idL, idR)=>{
+        const A = gh(nl), B = gh(nr);
+        if(!A || !B) return;
+        kiHints[idL] = A.x <= B.x ? A : B;
+        kiHints[idR] = A.x <= B.x ? B : A;
+      };
+      const hk = VIEWS[view].headKp === 'ear' ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
+      hp(hk[0], hk[1], 'headL', 'headR');
+      hp('left_shoulder','right_shoulder','shL','shR');
+      hp('left_hip','right_hip','hipL','hipR');
+      hp('left_ankle','right_ankle','ankL','ankR');
+    }
+    for(const k2 in kiHints) if(!kiHints[k2]) delete kiHints[k2];
+
     const put = (id, p)=>{ if(p && !pts[id]){
       pts[id] = {x: Math.min(iw, Math.max(0, p.x)), y: Math.min(ih, Math.max(0, p.y))};
       placeOrder.push(id); return true; } return false; };
@@ -1632,7 +1693,7 @@ $('btnSingle').addEventListener('click', ()=>{
 });
 
 function resetToEmpty(){
-  singleOpen = false;
+  singleOpen = false; kiHints = {};
   img = null; pts = {}; placeOrder = []; state = 'empty';
   z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset();
   wrap.style.display = 'none';
