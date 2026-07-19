@@ -335,7 +335,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 4.1 · Stand 18.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 4.2 · Stand 19.07.2026</div>
 </main>
 </div>
 
@@ -567,6 +567,9 @@ function deltaInfo(cmp, oldV, newV){
    ============================================================ */
 function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null, pOff = 0, interactive = false, pTilt = 0, bgFill = null){
   const s = (cssW / srcW) * zz;
+  /* Overlay-Maßstab: auf kleinen Canvases (Vergleich, Vorschau) schrumpfen
+     Linien, Marker und Legende mit, damit der Körper sichtbar bleibt */
+  const u = Math.min(1.4, Math.max(0.55, cssW / 640));
   c2.clearRect(0, 0, cssW, cssH);
   c2.fillStyle = bgFill || '#FFFFFF';
   c2.fillRect(0, 0, cssW, cssH);
@@ -578,7 +581,7 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
     if(!a || !b) return;
     /* weißer Halo darunter -> Linie bleibt auf jedem Foto deutlich sichtbar */
     c2.setLineDash(dash || []);
-    c2.strokeStyle = 'rgba(255,255,255,.9)'; c2.lineWidth = width + 3;
+    c2.strokeStyle = 'rgba(255,255,255,.85)'; c2.lineWidth = width + 2*u;
     c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
     c2.strokeStyle = color; c2.lineWidth = width;
     c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
@@ -590,7 +593,7 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
     const tr = pTilt * Math.PI / 180;
     const dx = Math.sin(tr), dy = -Math.cos(tr);
     const L = (cssW + cssH) * 2;
-    seg({x: px - dx*L, y: py - dy*L}, {x: px + dx*L, y: py + dy*L}, '#E0301E', 2.5, [9,7]);
+    seg({x: px - dx*L, y: py - dy*L}, {x: px + dx*L, y: py + dy*L}, '#E0301E', 1.8*u, [7*u, 5.5*u]);
     if(interactive){
       const onLine = yy => ({x: px + (yy - py)/dy * dx, y: yy});
       const grip = (g, glyph) => {
@@ -615,33 +618,38 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
   if(VIEWS[v].family === 'side'){
     const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), tr=P('tragus');
     if(m) plumbAt(m.x, m.y);
-    seg(m,k, IST, 3.5); seg(k,t, IST, 3.5); seg(t,a, IST, 3.5);
-    seg(a,tr, IST, 3.5);                       /* durchgezogen bis zum Ohr */
+    seg(m,k, IST, 2*u); seg(k,t, IST, 2*u); seg(t,a, IST, 2*u);
+    seg(a,tr, IST, 2*u);                       /* durchgezogen bis zum Ohr */
   } else {
     const hL=P('headL'), hR=P('headR'), sL=P('shL'), sR=P('shR'),
           bL=P('hipL'), bR=P('hipR'), aL=P('ankL'), aR=P('ankR');
     if(aL && aR){
       const mid = {x:(aL.x+aR.x)/2, y:(aL.y+aR.y)/2};
       plumbAt(mid.x, mid.y);
-      if(hL && hR) seg(mid, {x:(hL.x+hR.x)/2, y:(hL.y+hR.y)/2}, IST, 2.5);
-      seg(aL,aR, IST, 3);
+      if(hL && hR) seg(mid, {x:(hL.x+hR.x)/2, y:(hL.y+hR.y)/2}, IST, 1.4*u);
+      seg(aL,aR, IST, 2*u);
     }
-    seg(hL,hR, IST, 3.5);
-    seg(sL,sR, IST, 3.5);
-    seg(bL,bR, IST, 3.5);
+    seg(hL,hR, IST, 2*u);
+    seg(sL,sR, IST, 2*u);
+    seg(bL,bR, IST, 2*u);
   }
 
   /* Punkte */
   for(const l of VIEWS[v].landmarks){
     const q = P(l.id);
     if(!q) continue;
-    c2.beginPath(); c2.arc(q.x, q.y, 7.5, 0, 7); c2.fillStyle = '#fff'; c2.fill();
-    c2.beginPath(); c2.arc(q.x, q.y, 5, 0, 7); c2.fillStyle = '#0D9488'; c2.fill();
+    /* offener Ring statt gefüllter Scheibe: die Anatomie darunter bleibt
+       sichtbar, der kleine Mittelpunkt markiert die exakte Position */
+    c2.beginPath(); c2.arc(q.x, q.y, 4.6*u, 0, 7);
+    c2.strokeStyle = 'rgba(255,255,255,.92)'; c2.lineWidth = 3.2*u; c2.stroke();
+    c2.strokeStyle = '#0D9488'; c2.lineWidth = 1.6*u; c2.stroke();
+    c2.beginPath(); c2.arc(q.x, q.y, 1.9*u, 0, 7); c2.fillStyle = 'rgba(255,255,255,.92)'; c2.fill();
+    c2.beginPath(); c2.arc(q.x, q.y, 1.1*u, 0, 7); c2.fillStyle = '#0D9488'; c2.fill();
     if(!showLabels) continue;
     c2.font = '600 10px "IBM Plex Mono", monospace';
     const tw = c2.measureText(l.short).width;
-    let lx = q.x + 11, ly = q.y - 18;
-    if(lx + tw + 10 > cssW) lx = q.x - tw - 21;
+    let lx = q.x + 9, ly = q.y - 16;
+    if(lx + tw + 10 > cssW) lx = q.x - tw - 19;
     if(ly < 2) ly = q.y + 8;
     c2.fillStyle = 'rgba(255,255,255,.92)';
     if(c2.roundRect){ c2.beginPath(); c2.roundRect(lx, ly, tw+10, 16, 4); c2.fill(); }
@@ -650,29 +658,31 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
     c2.fillText(l.short, lx+5, ly+11.5);
   }
 
-  /* Mini-Legende unten links: Soll vs. Ist */
-  const ly0 = cssH - 22;
+  /* Mini-Legende unten links: Soll vs. Ist (skaliert mit dem Canvas) */
+  const lu = Math.max(0.7, u);
+  const ly0 = cssH - 22*lu;
   c2.fillStyle = 'rgba(255,255,255,.88)';
-  if(c2.roundRect){ c2.beginPath(); c2.roundRect(8, ly0 - 6, 168, 22, 6); c2.fill(); }
-  else c2.fillRect(8, ly0 - 6, 168, 22);
-  c2.strokeStyle = '#E0301E'; c2.lineWidth = 2.5; c2.setLineDash([6,5]);
-  c2.beginPath(); c2.moveTo(16, ly0+5); c2.lineTo(44, ly0+5); c2.stroke(); c2.setLineDash([]);
-  c2.strokeStyle = IST; c2.lineWidth = 3.5;
-  c2.beginPath(); c2.moveTo(96, ly0+5); c2.lineTo(124, ly0+5); c2.stroke();
-  c2.fillStyle = '#152430'; c2.font = '600 10px "IBM Plex Mono", monospace';
-  c2.fillText('Soll', 48, ly0 + 8.5);
-  c2.fillText('Ist', 128, ly0 + 8.5);
+  if(c2.roundRect){ c2.beginPath(); c2.roundRect(8, ly0 - 6*lu, 150*lu, 21*lu, 6*lu); c2.fill(); }
+  else c2.fillRect(8, ly0 - 6*lu, 150*lu, 21*lu);
+  c2.strokeStyle = '#E0301E'; c2.lineWidth = 1.8*lu; c2.setLineDash([5*lu, 4*lu]);
+  c2.beginPath(); c2.moveTo(8 + 8*lu, ly0 + 4.5*lu); c2.lineTo(8 + 32*lu, ly0 + 4.5*lu); c2.stroke(); c2.setLineDash([]);
+  c2.strokeStyle = IST; c2.lineWidth = 2*lu;
+  c2.beginPath(); c2.moveTo(8 + 82*lu, ly0 + 4.5*lu); c2.lineTo(8 + 106*lu, ly0 + 4.5*lu); c2.stroke();
+  c2.fillStyle = '#152430'; c2.font = `600 ${(10*lu).toFixed(1)}px "IBM Plex Mono", monospace`;
+  c2.fillText('Soll', 8 + 36*lu, ly0 + 8*lu);
+  c2.fillText('Ist', 8 + 110*lu, ly0 + 8*lu);
 
   /* Datumsstempel oben rechts – wandert mit dem Bild in jede Vorschau und jedes PDF */
   if(dateLabel){
-    c2.font = '600 11px "IBM Plex Mono", monospace';
+    const du = Math.max(0.75, u);
+    c2.font = `600 ${(11*du).toFixed(1)}px "IBM Plex Mono", monospace`;
     const tw = c2.measureText(dateLabel).width;
-    const bx = cssW - tw - 22, by = 8;
+    const bx = cssW - tw - 22*du, by = 8;
     c2.fillStyle = 'rgba(255,255,255,.92)';
-    if(c2.roundRect){ c2.beginPath(); c2.roundRect(bx, by, tw + 14, 20, 6); c2.fill(); }
-    else c2.fillRect(bx, by, tw + 14, 20);
+    if(c2.roundRect){ c2.beginPath(); c2.roundRect(bx, by, tw + 14*du, 20*du, 6*du); c2.fill(); }
+    else c2.fillRect(bx, by, tw + 14*du, 20*du);
     c2.fillStyle = '#152430';
-    c2.fillText(dateLabel, bx + 7, by + 14);
+    c2.fillText(dateLabel, bx + 7*du, by + 14*du);
   }
 }
 
