@@ -1,0 +1,2386 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Lotlinie">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0F766E">
+<title>Lotlinie · Haltungsanalyse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --mist:#EDF1EF; --card:#FFFFFF; --ink:#152430; --ink2:rgba(21,36,48,.62);
+  --line:#D9E0DD; --petrol:#0F766E; --petrol-d:#0B5D57; --petrol-t:rgba(15,118,110,.08);
+  --plumb:#00A94F; --ok:#157A55; --warn:#A9700F; --alert:#B23A32; --r:12px;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;padding:0}
+body{font-family:'Archivo',system-ui,-apple-system,sans-serif;background:var(--mist);color:var(--ink);
+  -webkit-tap-highlight-color:transparent;font-size:15px;line-height:1.45}
+.mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace}
+
+/* ---------- Kopf ---------- */
+header{padding:18px 16px 10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.brand{font-weight:800;font-stretch:115%;letter-spacing:.14em;font-size:19px;text-transform:uppercase}
+.plumb-sep{display:inline-block;width:0;border-left:2px solid var(--plumb);height:1em;margin:0 .32em;vertical-align:-.14em}
+.tagline{font-size:12.5px;color:var(--ink2);letter-spacing:.02em}
+
+main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-direction:column;gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.card h2{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin:0 0 10px;font-weight:700}
+
+/* ---------- Steuerung ---------- */
+.seg{display:flex;background:var(--mist);border:1px solid var(--line);border-radius:999px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;border-radius:999px;padding:9px 0;font:inherit;
+  font-weight:600;color:var(--ink2);cursor:pointer}
+.seg button.active{background:var(--ink);color:#fff}
+.row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.row + .row{margin-top:10px}
+.field{flex:1;display:flex;flex-direction:column;gap:4px;min-width:120px}
+.field label{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink2)}
+.field input,.field textarea{border:1px solid var(--line);border-radius:9px;padding:9px 11px;font:inherit;background:#fff;width:100%}
+.field input:focus-visible,.field textarea:focus-visible,button:focus-visible{outline:2px solid var(--petrol);outline-offset:1px}
+.field.narrow{flex:0 0 158px}
+
+.btn{border:0;border-radius:10px;padding:12px 16px;font:inherit;font-weight:650;cursor:pointer;
+  background:var(--petrol);color:#fff;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn:active{background:var(--petrol-d)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.small{padding:8px 12px;font-size:13.5px;font-weight:600;border-radius:9px}
+.btn[disabled]{opacity:.45;cursor:default}
+.btn.block{width:100%}
+
+/* ---------- Foto / Canvas ---------- */
+#emptyState{text-align:center;padding:30px 16px}
+#emptyState h3{font-size:16.5px;margin:0 0 6px;font-weight:700}
+#emptyState p{margin:0 0 16px;color:var(--ink2);font-size:13.5px}
+#emptyState .tips{text-align:left;font-size:13px;color:var(--ink2);margin:18px auto 0;max-width:420px;
+  border-top:1px dashed var(--line);padding-top:12px}
+#emptyState .tips b{color:var(--ink)}
+.btnrow{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+#canvasWrap{position:relative;display:none;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);
+  background:#fff;touch-action:none}
+#stage{display:block;width:100%;touch-action:none}
+#loupe{position:absolute;width:132px;height:132px;border-radius:50%;border:2.5px solid var(--petrol);
+  box-shadow:0 6px 20px rgba(0,0,0,.35);overflow:hidden;pointer-events:none;display:none;background:#000;z-index:5}
+#loupe canvas{display:block;width:132px;height:132px}
+#zoomChip{position:absolute;top:10px;left:10px;z-index:4;border:0;border-radius:999px;
+  padding:7px 12px;font-size:12px;font-weight:600;background:rgba(21,36,48,.82);color:#fff;cursor:pointer}
+#busy{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;gap:10px;
+  align-items:center;justify-content:center;background:rgba(14,22,29,.45)}
+#busy .sp{width:34px;height:34px;border-radius:50%;border:3.5px solid rgba(255,255,255,.35);
+  border-top-color:#fff;animation:lspin .8s linear infinite}
+@keyframes lspin{to{transform:rotate(360deg)}}
+#busy .bt{color:#fff;font-size:13px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.45)}
+#lmHelp{position:absolute;top:10px;right:10px;z-index:5;width:118px;pointer-events:none;
+  transition:left .15s ease, top .15s ease;
+  background:rgba(255,255,255,.96);border:2px solid var(--petrol);border-radius:12px;
+  padding:7px 7px 5px;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+#lmHelpArt img{width:100%;height:auto;display:block;border-radius:8px}
+#lmHelpArt img.flip{transform:scaleX(-1)}
+#lmHelpCap{font-size:10px;font-weight:700;color:var(--ink);margin-top:3px;line-height:1.25}
+#lmHelp::before{content:'';position:absolute;top:50%;width:12px;height:12px;background:#fff;
+  border:2px solid var(--petrol);transform:translateY(-50%) rotate(45deg);display:none}
+#lmHelp.pl::before{display:block;left:-8px;border-right:0;border-top:0}
+#lmHelp.pr::before{display:block;right:-8px;border-left:0;border-bottom:0}
+
+#guideBar{display:none;background:var(--petrol-t);border:1px solid rgba(15,118,110,.25)}
+#guideBar .step{font-size:11.5px;letter-spacing:.08em;font-weight:600;color:var(--petrol-d);text-transform:uppercase}
+#guideBar h3{margin:3px 0 2px;font-size:16px}
+#guideBar .hint{font-size:13px;color:var(--ink2);margin:0 0 10px}
+#tiltWarn{background:rgba(169,112,15,.10);border:1px solid rgba(169,112,15,.35);border-radius:9px;padding:10px 12px;margin-bottom:12px}
+.tiltmsg{font-size:13px;color:#8a5c0a;font-weight:600}
+#guideBar .dots{display:flex;gap:5px;margin:10px 0 12px}
+.qm{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.qm span{font-size:11.5px;font-weight:650;padding:5px 10px;border-radius:999px;
+  background:#fff;border:1px solid var(--line)}
+#btnExamNext{flex:1 1 100%;padding:13px 16px;font-size:15px}
+#btnQuickSave{flex:1 1 100%;padding:13px 16px;font-size:15px}
+#guideBar .dots i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+#guideBar .dots i.on{background:var(--petrol)}
+
+/* ---------- Messwerte ---------- */
+#resultsCard{display:none}
+.metric{display:flex;justify-content:space-between;gap:12px;padding:11px 0 11px 12px;border-left:2px dashed var(--line)}
+.metric + .metric{border-top:1px solid var(--line)}
+.metric .n{font-weight:650;font-size:14.5px}
+.metric .norm{font-size:12px;color:var(--ink2);margin-top:2px}
+.metric .v{font-size:21px;font-weight:600;text-align:right;white-space:nowrap}
+.metric .sub{font-size:11.5px;text-align:right;margin-top:2px;font-weight:600}
+.metric.miss .v{color:var(--ink2);font-weight:400}
+.st-ok{color:var(--ok)} .st-warn{color:var(--warn)} .st-alert{color:var(--alert)} .st-none{color:var(--ink2)}
+.legalline{font-size:11.5px;color:var(--ink2);margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+.privacy{font-size:12px;color:var(--ink2);text-align:center;padding:2px 10px 0}
+
+/* ---------- Verlauf ---------- */
+.hist-empty{font-size:13px;color:var(--ink2);padding:6px 0 2px}
+.hist-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.hist-row:last-of-type{border-bottom:0}
+.hist-row input[type=checkbox]{width:19px;height:19px;accent-color:var(--petrol);flex:0 0 auto}
+.hist-main{flex:1;min-width:0;cursor:pointer}
+.hist-t{font-weight:650;font-size:13.5px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.viewtag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;
+  background:var(--petrol-t);color:var(--petrol-d);font-weight:700}
+.hist-sub{font-size:12px;color:var(--ink2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iconbtn{border:1px solid var(--line);background:#fff;border-radius:8px;width:36px;height:36px;font-size:15px;
+  cursor:pointer;flex:0 0 auto}
+.histfoot{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.histfoot .btn{flex:1;min-width:130px}
+
+/* ---------- Vorschau (Untersuchung) ---------- */
+.slides{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;padding-bottom:4px}
+.slide{flex:0 0 100%;scroll-snap-align:center}
+.slide canvas{width:100%;display:block;border-radius:10px;border:1px solid var(--line);background:#fff}
+.slide .cap{font-size:12px;text-align:center;margin-top:5px;color:var(--ink2)}
+
+/* ---------- Vergleich ---------- */
+#compareCard{display:none}
+.cmpscroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch}
+.cmpitem{flex:0 0 auto;width:min(46vw,250px)}
+.cmpitem canvas{width:100%;display:block;border-radius:8px;border:1px solid var(--line);background:#fff}
+.cmpcap{font-size:11.5px;text-align:center;margin-top:5px;color:var(--ink2)}
+.cmptwrap{overflow-x:auto;margin-top:12px}
+.cmptable{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.cmptable th,.cmptable td{padding:8px 9px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.cmptable th:first-child,.cmptable td:first-child{text-align:left;font-weight:650;white-space:normal;min-width:110px}
+.cmptable thead th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink2);font-weight:700}
+.cmptable .delta{font-weight:650}
+
+/* ---------- Druckbericht ---------- */
+#report{display:none}
+@media print{
+  body{background:#fff}
+  #app{display:none!important}
+  #report{display:block;font-size:12.5px;color:#152430}
+  #report .rb{font-weight:800;letter-spacing:.14em;font-size:15px;text-transform:uppercase}
+  #report .meta{margin:8px 0 14px;display:flex;gap:24px;flex-wrap:wrap;color:#444}
+  #report img.single{max-width:100%;max-height:112mm;display:block;margin:0 auto 12px;border:1px solid #ccc}
+  #report .cmpimgs{display:flex;gap:3mm;flex-wrap:wrap;margin-bottom:10px}
+  #report .cmpimgs figure{margin:0;text-align:center}
+  #report .cmpimgs img{width:100%;border:1px solid #ccc}
+  #report .cmpimgs figcaption{font-size:10px;color:#555;margin-top:2px}
+  #report table{width:100%;border-collapse:collapse;margin:6px 0 14px}
+  #report th,#report td{border:1px solid #bbb;padding:5px 7px;text-align:left;vertical-align:top}
+  #report th{background:#eee;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em}
+  #report .disc{font-size:10.5px;color:#555;border-top:1px solid #bbb;padding-top:8px;margin-top:16px}
+  #report .sig{margin-top:32px;border-top:1px solid #444;width:220px;padding-top:4px;font-size:11px}
+  @page{margin:13mm}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">Lot<span class="plumb-sep"></span>Linie</div>
+  <div class="tagline">Haltungsanalyse zur Verlaufsdokumentation</div>
+</header>
+
+<main>
+  <!-- Ansicht + Patient -->
+  <div class="card">
+    <div class="seg" role="tablist" aria-label="Ansicht" id="segRow">
+      <button data-view="front" class="active" role="tab" aria-selected="true">Vorne</button>
+      <button data-view="sideR" role="tab" aria-selected="false">Rechts</button>
+      <button data-view="back" role="tab" aria-selected="false">Hinten</button>
+      <button data-view="sideL" role="tab" aria-selected="false">Links</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div class="field">
+        <label for="patient">Patient·in</label>
+        <input id="patient" type="text" placeholder="Name (optional)" autocomplete="off">
+      </div>
+      <div class="field narrow">
+        <label for="sessDate">Aufnahmedatum</label>
+        <input id="sessDate" type="date">
+      </div>
+    </div>
+  </div>
+
+  <!-- Leerer Zustand -->
+  <div class="card" id="emptyState">
+    <h3 id="emptyTitle">Neue Analyse</h3>
+    <p id="emptySub">Der geführte Ablauf nimmt alle 4 Ansichten nacheinander auf – Vorne, Rechts, Hinten, Links.</p>
+    <button class="btn block" id="btnExam" style="margin-bottom:10px">🩺 Untersuchung starten</button>
+    <div id="examLenRow" style="margin-bottom:14px;text-align:center">
+      <div style="display:flex;align-items:center;gap:10px;justify-content:center">
+        <span style="font-size:12px;color:var(--ink2);font-weight:600">Ansichten:</span>
+        <div class="seg" id="examLenSeg" style="flex:0 0 auto;padding:2px">
+          <button data-len="2" style="padding:7px 16px">2</button>
+          <button data-len="3" style="padding:7px 16px">3</button>
+          <button data-len="4" class="active" style="padding:7px 16px">4</button>
+        </div>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink2);margin-top:5px">2: Vorne + Rechts · 3: + Hinten · 4: + Links</div>
+    </div>
+    <button class="btn ghost small" id="btnSingle" style="display:block;margin:0 auto">Einzelne Ansicht ohne geführten Ablauf ▸</button>
+    <div id="photoRow" hidden>
+      <p style="font-size:12.5px;color:var(--ink2);margin:12px 0 10px">Ohne automatisches Weiterschalten –
+      für schnelle Einzelchecks oder Nachbearbeitung. Ansicht oben über die Tabs wählen.</p>
+      <div class="btnrow">
+        <button class="btn" id="btnCam">📷 Foto aufnehmen</button>
+        <button class="btn ghost" id="btnGal">Aus Galerie</button>
+      </div>
+    </div>
+    <div class="tips">
+      <b>Aufnahme-Tipps:</b> Kamera auf Brusthöhe und gerade halten · neutraler Stand, Blick geradeaus ·
+      eng anliegende Kleidung, Landmarken sichtbar · seitlich: exakt von der Seite fotografieren ·
+      für Verlaufsvergleiche möglichst gleiche Position und Entfernung.
+    </div>
+  </div>
+
+  <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+  <input type="file" id="fileGal" accept="image/*" hidden>
+  <input type="file" id="fileImport" accept=".json,application/json" multiple hidden>
+
+  <!-- Canvas -->
+  <div id="canvasWrap">
+    <canvas id="stage"></canvas>
+    <button id="zoomChip" class="mono" hidden>1,0× · Reset</button>
+    <div id="busy" hidden><div class="sp"></div><div class="bt" id="busyTxt"></div></div>
+    <div id="lmHelp" hidden><div id="lmHelpArt"></div><div id="lmHelpCap"></div></div>
+    <div id="loupe"><canvas id="loupeCv" width="132" height="132"></canvas></div>
+  </div>
+
+  <!-- Führung -->
+  <div class="card" id="guideBar">
+    <div id="tiltWarn" hidden>
+      <div class="tiltmsg" id="tiltMsg"></div>
+      <div class="row" style="margin:8px 0 12px">
+        <button class="btn small" id="btnStraighten">Bild begradigen</button>
+        <button class="btn ghost small" id="btnTiltPlumb">Nur Soll-Linie kippen</button>
+        <button class="btn ghost small" id="btnTiltIgnore">Ignorieren</button>
+      </div>
+    </div>
+    <div class="step" id="guideStep"></div>
+    <h3 id="guideName"></h3>
+    <p class="hint" id="guideHint"></p>
+    <div class="qm mono" id="quickMetrics" hidden></div>
+    <div class="dots" id="guideDots"></div>
+    <p class="hint" id="kiMsg" hidden style="margin:0 0 10px"></p>
+    <div class="row" id="quickRow" hidden>
+      <button class="btn small" id="btnQuickSave">✓ Aufnahme in Verlauf sichern</button>
+    </div>
+    <div class="row" id="examRow" hidden>
+      <button class="btn small" id="btnExamNext" disabled>Speichern & weiter →</button>
+      <button class="btn ghost small" id="btnExamSkip">Überspringen</button>
+      <button class="btn ghost small" id="btnExamStop">Beenden</button>
+    </div>
+    <div class="row">
+      <button class="btn small" id="btnKI">✨ Punkte per KI vorschlagen</button>
+      <button class="btn ghost small" id="btnBG" hidden>🪄 Hintergrund entfernen</button>
+      <button class="btn ghost small" id="btnUndo">↶ Punkt zurück</button>
+      <button class="btn ghost small" id="btnRestart">Punkte neu setzen</button>
+      <button class="btn ghost small" id="btnReplace">Foto ersetzen</button>
+    </div>
+  </div>
+
+  <!-- Ergebnisse -->
+  <div class="card" id="resultsCard">
+    <h2>Messwerte</h2>
+    <div id="metricsList"></div>
+    <div class="legalline" id="legalLine"></div>
+    <div class="field" style="margin-top:12px">
+      <label for="notes">Notizen</label>
+      <textarea id="notes" rows="3" placeholder="Beobachtungen, Maßnahmen …"></textarea>
+    </div>
+    <button class="btn block" id="btnAddSession" style="margin-top:12px" disabled>Zur Verlaufsliste hinzufügen</button>
+    <button class="btn ghost block" id="btnReport" style="margin-top:8px" disabled>Einzelbericht drucken / PDF</button>
+  </div>
+
+  <!-- Verlauf -->
+  <div class="card" id="historyCard">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h2 style="margin:0">Verlauf</h2>
+      <button class="btn ghost small" id="btnImport">Importieren</button>
+    </div>
+    <div id="histList"></div>
+    <div class="histfoot">
+      <button class="btn small" id="btnCompare" disabled>Vergleichen</button>
+      <button class="btn ghost small" id="btnExportAll" disabled>Alle exportieren</button>
+    </div>
+  </div>
+
+  <!-- Untersuchungs-Vorschau -->
+  <div class="card" id="previewCard" style="display:none">
+    <h2 id="prevTitle">Untersuchung · Vorschau</h2>
+    <div class="slides" id="prevSlides"></div>
+    <div style="font-size:12px;color:var(--ink2);margin-top:6px;text-align:center">← wischen zum Blättern →</div>
+    <button class="btn block" id="btnExamPDF" style="margin-top:12px">PDF erstellen & teilen</button>
+    <button class="btn ghost block" id="btnExamSave" style="margin-top:8px">💾 Daten sichern (für späteren Vergleich)</button>
+    <button class="btn ghost block" id="btnPrevClose" style="margin-top:8px">Schließen</button>
+    <div class="legalline">Das PDF ist der Bericht zum Anschauen und Teilen. Die <b>Daten-Datei</b> ist zum
+    Wieder-Einlesen: beim nächsten Termin über „Verlauf → Importieren" laden und vergleichen.
+    Die App selbst merkt sich nach dem Schließen nichts.</div>
+  </div>
+
+  <!-- Vergleich -->
+  <div class="card" id="compareCard">
+    <h2 id="cmpTitle">Vergleich</h2>
+    <div class="cmpscroll" id="cmpImgs"></div>
+    <div class="cmptwrap"><table class="cmptable" id="cmpTable"></table></div>
+    <div class="legalline" id="cmpLegal"></div>
+    <button class="btn block" id="btnCmpPDF" style="margin-top:12px">Verlaufs-PDF erstellen & teilen</button>
+    <button class="btn ghost block" id="btnCmpClose" style="margin-top:8px">Vergleich schließen</button>
+  </div>
+
+  <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
+  exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
+  <div class="privacy mono" style="margin-top:2px">Version 4.3 · Stand 20.07.2026</div>
+</main>
+</div>
+
+<!-- Druckansicht -->
+<div id="report"></div>
+
+<script>
+'use strict';
+const AUTO_KI = !/[?&]noki=1/.test(location.search);   /* ?noki=1 deaktiviert Auto-Vorschläge */
+/* ============================================================
+   Lotlinie – Haltungsanalyse mit Verlaufsvergleich
+   Landmarken per geführtem Fingertipp (mit Lupe), Winkel werden
+   automatisch berechnet. Aufnahmen können in einer Verlaufsliste
+   gesammelt, als Datei exportiert/importiert und verglichen
+   werden. Alles läuft lokal im Browser.
+   ============================================================ */
+
+const SIDE_LM = [
+  {id:'tragus',    name:'Tragus (Ohr)',              short:'Ohr',  hint:'Kleiner Knorpel direkt vor dem Gehörgang.'},
+  {id:'acromion',  name:'Acromion (Schulterhöhe)',   short:'Sch',  hint:'Knöcherner Punkt ganz oben auf der Schulter.'},
+  {id:'trochanter',name:'Trochanter major (Hüfte)',  short:'Hüf',  hint:'Seitlicher Knochenvorsprung am oberen Oberschenkel.'},
+  {id:'knee',      name:'Kniegelenk (seitlich)',     short:'Knie', hint:'Seitlicher Gelenkspalt auf Kniemitte.'},
+  {id:'malleolus', name:'Außenknöchel',              short:'Knö',  hint:'Seitlicher Knöchel am Sprunggelenk.'}
+];
+const PAIR_LM = (kopfName, kopfHint, kopfShort) => [
+  {id:'headL', name:kopfName + ' – linke Bildseite',  short:kopfShort+'L', hint:kopfHint},
+  {id:'headR', name:kopfName + ' – rechte Bildseite', short:kopfShort+'R', hint:kopfHint},
+  {id:'shL',  name:'Schulter – linke Bildseite',      short:'SchL', hint:'Höchster Punkt der Schulter (Acromion).'},
+  {id:'shR',  name:'Schulter – rechte Bildseite',     short:'SchR', hint:'Höchster Punkt der Schulter (Acromion).'},
+  {id:'hipL', name:'Beckenkamm – linke Bildseite',    short:'BkL',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+  {id:'hipR', name:'Beckenkamm – rechte Bildseite',   short:'BkR',  hint:'Oberkante des Beckenkamms (Crista iliaca).'},
+  {id:'ankL', name:'Sprunggelenk – linke Bildseite',  short:'SpL',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'},
+  {id:'ankR', name:'Sprunggelenk – rechte Bildseite', short:'SpR',  hint:'Mitte des Sprunggelenks zwischen den Knöcheln.'}
+];
+const VIEWS = {
+  front: {label:'Vorne',           family:'pairs', headKp:'eye', landmarks:PAIR_LM('Auge','Mitte der Pupille.','Au')},
+  sideR: {label:'Rechts seitlich', family:'side',  landmarks:SIDE_LM},
+  back:  {label:'Hinten',          family:'pairs', headKp:'ear', landmarks:PAIR_LM('Ohr','Mitte des Ohrs (Ansatz).','Ohr')},
+  sideL: {label:'Links seitlich',  family:'side',  landmarks:SIDE_LM}
+};
+const LEGACY_VIEW = {lateral:'sideR', frontal:'front'};
+const EXAM_ORDER = ['front','sideR','back','sideL'];
+
+/* ---------- Zustand ---------- */
+let view = 'front';
+let exam = null;   /* aktive Untersuchung: {idx, ids:{viewKey:sessionId}} */
+let img = null, iw = 0, ih = 0;      // aktuelles Editor-Bild
+let pts = {};                        // id -> {x,y} in Bildkoordinaten
+let state = 'empty';                 // empty | placing | done
+let placeOrder = [];                 // Reihenfolge der gesetzten Punkte (für Undo)
+let z = 1, tx = 0, ty = 0;           // Zoom & Verschiebung (CSS-Pixel)
+let imgAlpha = false;                // Bild ist freigestellt (transparenter Hintergrund)
+let loadSeq = 0;                     // Ladefolge: entwertet laufende Auto-Verarbeitung
+let kiHints = {};                    // grobe KI-Positionen als Anker für die Setz-Hilfe
+let plumbOff = 0;                    // Verschiebung der Soll-Linie (Bildpixel)
+let plumbTilt = 0;                   // Kippung der Soll-Linie (Grad) = Referenz-Senkrechte
+let tiltDeg = 0;                     // gemessene Schieflage (Grad, aus KI)
+let tiltHandled = false;             // Warnung bereits behandelt?
+let currentMetrics = [];
+let editingId = null;                // Verlaufseintrag, der gerade bearbeitet wird
+
+let sessions = [];                   // Verlaufsliste (im Speicher, Export als Datei)
+const selIds = new Set();            // für Vergleich ausgewählt
+const imgCache = {};                 // id -> geladenes Image der Session
+let cmpSel = [];                     // aktuell verglichene Sessions (sortiert)
+
+/* Interaktion (Gesten) */
+const activePtrs = new Map();        // pointerId -> {x,y}
+let gesture = null;                  // 'place' | 'move' | 'pan' | 'pinch' | 'dead'
+let gestureId = null, dragId = null, lastPos = null, moveOrig = null, pinchRef = null;
+let plumbGrabDX = 0;
+
+function plumbAnchorX(){
+  if(VIEWS[view].family === 'side') return pts.malleolus ? pts.malleolus.x : null;
+  return (pts.ankL && pts.ankR) ? (pts.ankL.x + pts.ankR.x)/2 : null;
+}
+function plumbAnchorY(){
+  if(VIEWS[view].family === 'side') return pts.malleolus ? pts.malleolus.y : null;
+  return (pts.ankL && pts.ankR) ? (pts.ankL.y + pts.ankR.y)/2 : null;
+}
+
+function nextTarget(){ return lm().find(l => !pts[l.id]) || null; }
+function placedCount(){ return lm().filter(l => pts[l.id]).length; }
+
+/* ---------- DOM ---------- */
+const $ = id => document.getElementById(id);
+const stage = $('stage'), ctx = stage.getContext('2d');
+const wrap = $('canvasWrap');
+const loupe = $('loupe'), loupeCv = $('loupeCv'), lctx = loupeCv.getContext('2d');
+
+/* ---------- Hilfen ---------- */
+const deg = r => r * 180 / Math.PI;
+const fmt = n => n.toFixed(1).replace('.', ',') + '°';
+const lm  = () => VIEWS[view].landmarks;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function todayISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+function fmtDate(iso){
+  if(!iso) return '–';
+  const p = iso.split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : iso;
+}
+function nowTime(){
+  return new Date().toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'});
+}
+$('sessDate').value = todayISO();
+
+/* ============================================================
+   Messwerte – reine Funktionen (auch für gespeicherte Aufnahmen)
+   cmp: 'higher' = größer ist besser · 'lower0' = näher an 0 besser
+        'near180' = näher an 180° besser
+   ============================================================ */
+function metricFor(p, name, norm, cmp, need, fn){
+  const ok = need.every(id => p[id]);
+  if(!ok) return {name, norm, cmp, available:false, txt:'–', sub:'Punkte fehlen', st:null, val:null};
+  const r = fn();
+  return Object.assign({name, norm, cmp, available:true}, r);
+}
+function stOf(mag, warnAt, alertAt){ return mag <= warnAt ? 'ok' : mag <= alertAt ? 'warn' : 'alert'; }
+const stWord = {ok:'im Richtbereich', warn:'leicht auffällig', alert:'auffällig'};
+
+function refRotate(p, tiltRef){
+  const ang = -tiltRef * Math.PI / 180;
+  const c = Math.cos(ang), s = Math.sin(ang);
+  const o = {};
+  for(const k in p) o[k] = {x: p[k].x*c - p[k].y*s, y: p[k].x*s + p[k].y*c};
+  return o;
+}
+function computeMetricsFor(v, p, tiltRef = 0){
+  if(tiltRef) p = refRotate(p, tiltRef);
+  const out = [];
+  const fam = VIEWS[v].family;
+  if(fam === 'side'){
+    /* Blickrichtung ohne C7: Ohr relativ zu Schulter, notfalls zu Hüfte */
+    const facing = (p.tragus && p.acromion && Math.sign(p.tragus.x - p.acromion.x))
+      || (p.tragus && p.trochanter && Math.sign(p.tragus.x - p.trochanter.x)) || 1;
+
+    out.push(metricFor(p, 'Kopflot', 'Richtwert 0° ± 8° (Ohr über Schulter)', 'lower0',
+      ['tragus','acromion'], ()=>{
+        const a = deg(Math.atan2((p.tragus.x - p.acromion.x) * facing, p.acromion.y - p.tragus.y));
+        const mag = Math.abs(a);
+        return {val:mag, txt:fmt(mag),
+          sub: mag <= 3 ? 'Ohr über Schulter' : mag <= 8 ? 'leicht vorgeschoben' : 'Kopf vorgeschoben',
+          st: stOf(mag, 8, 14)};
+      }));
+
+    out.push(metricFor(p, 'Rumpflot', 'Richtwert 0° ± 3° (Trochanter → Acromion)', 'lower0',
+      ['trochanter','acromion'], ()=>{
+        const a = deg(Math.atan2((p.acromion.x - p.trochanter.x) * facing, p.trochanter.y - p.acromion.y));
+        const mag = Math.abs(a);
+        return {val:mag, txt:fmt(mag),
+          sub: mag <= 1 ? 'neutral' : (a > 0 ? 'nach vorn geneigt' : 'nach hinten geneigt'),
+          st: stOf(mag, 3, 6)};
+      }));
+
+    out.push(metricFor(p, 'Körperlot', 'Richtwert 0° ± 4° (Außenknöchel → Ohr)', 'lower0',
+      ['malleolus','tragus'], ()=>{
+        const a = deg(Math.atan2((p.tragus.x - p.malleolus.x) * facing, p.malleolus.y - p.tragus.y));
+        const mag = Math.abs(a);
+        return {val:mag, txt:fmt(mag),
+          sub: mag <= 1 ? 'im Lot' : (a > 0 ? 'vor dem Lot' : 'hinter dem Lot'),
+          st: stOf(mag, 4, 8)};
+      }));
+
+    out.push(metricFor(p, 'Kniewinkel', 'Richtwert ≈ 180° (Hüfte–Knie–Knöchel)', 'near180',
+      ['trochanter','knee','malleolus'], ()=>{
+        const t = p.trochanter, k = p.knee, m = p.malleolus;
+        const v1 = {x:t.x-k.x, y:t.y-k.y}, v2 = {x:m.x-k.x, y:m.y-k.y};
+        const cosv = (v1.x*v2.x + v1.y*v2.y) / ((Math.hypot(v1.x,v1.y) * Math.hypot(v2.x,v2.y)) || 1);
+        const ang = deg(Math.acos(Math.min(1, Math.max(-1, cosv))));
+        const dev = 180 - ang;
+        const cz = (m.x-t.x)*(k.y-t.y) - (m.y-t.y)*(k.x-t.x);
+        const side = -Math.sign(cz) || 0;
+        const dir = dev <= 3 ? 'neutral gestreckt' : (side === facing ? 'leicht gebeugt' : 'überstreckt');
+        return {val:ang, txt:fmt(ang), sub:dir, st: dev <= 6 ? 'ok' : dev <= 10 ? 'warn' : 'alert'};
+      }));
+
+  } else {
+    const kopf = VIEWS[v].headKp === 'ear' ? 'Ohrlinie' : 'Augenlinie';
+    const tilt = (a, b)=>{
+      const ang = deg(Math.atan2(p[b].y - p[a].y, p[b].x - p[a].x));
+      const mag = Math.abs(ang);
+      const side = ang > 0.05 ? 'links höher' : ang < -0.05 ? 'rechts höher' : 'waagrecht';
+      return {mag, side};
+    };
+    out.push(metricFor(p, 'Kopfneigung', `Richtwert 0° ± 3° (${kopf})`, 'lower0',
+      ['headL','headR'], ()=>{ const t = tilt('headL','headR');
+        return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 3, 5)}; }));
+    out.push(metricFor(p, 'Schulterlinie', 'Richtwert 0° ± 2°', 'lower0',
+      ['shL','shR'], ()=>{ const t = tilt('shL','shR');
+        return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 2, 4)}; }));
+    out.push(metricFor(p, 'Beckenlinie', 'Richtwert 0° ± 2° (Crista iliaca)', 'lower0',
+      ['hipL','hipR'], ()=>{ const t = tilt('hipL','hipR');
+        return {val:t.mag, txt:fmt(t.mag), sub:t.side, st:stOf(t.mag, 2, 4)}; }));
+    out.push(metricFor(p, 'Mittellinie', 'Richtwert 0° ± 2° (Sprunggelenke → Kopf)', 'lower0',
+      ['headL','headR','ankL','ankR'], ()=>{
+        const mE = {x:(p.headL.x+p.headR.x)/2, y:(p.headL.y+p.headR.y)/2};
+        const mA = {x:(p.ankL.x+p.ankR.x)/2, y:(p.ankL.y+p.ankR.y)/2};
+        const a = deg(Math.atan2(mE.x - mA.x, mA.y - mE.y));
+        const mag = Math.abs(a);
+        const side = mag <= 0.5 ? 'zentriert' : (a > 0 ? 'nach rechts verschoben (Bild)' : 'nach links verschoben (Bild)');
+        return {val:mag, txt:fmt(mag), sub:side, st:stOf(mag, 2, 4)};
+      }));
+  }
+  return out;
+}
+
+/* Veränderung alt → neu, abhängig von cmp */
+function deltaInfo(cmp, oldV, newV){
+  let dv;
+  if(cmp === 'higher') dv = newV - oldV;
+  else if(cmp === 'near180') dv = Math.abs(180 - newV) - Math.abs(180 - oldV);
+  else dv = Math.abs(newV) - Math.abs(oldV);
+  const improved = cmp === 'higher' ? dv > 0.4 : dv < -0.4;
+  const worse    = cmp === 'higher' ? dv < -0.4 : dv > 0.4;
+  const sign = dv > 0.05 ? '+' : dv < -0.05 ? '−' : '±';
+  return {
+    txt: sign + fmt(Math.abs(dv)),
+    word: improved ? 'verbessert' : worse ? 'verschlechtert' : 'stabil',
+    st: improved ? 'ok' : worse ? 'alert' : 'none'
+  };
+}
+
+/* ============================================================
+   Zeichnen – wiederverwendbar für Editor, Vergleich und Bericht
+   ============================================================ */
+function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, oy = 0, showLabels = true, dateLabel = null, pOff = 0, interactive = false, pTilt = 0, bgFill = null){
+  const s = (cssW / srcW) * zz;
+  /* Overlay-Maßstab: auf kleinen Canvases (Vergleich, Vorschau) schrumpfen
+     Linien, Marker und Legende mit, damit der Körper sichtbar bleibt */
+  const u = Math.min(1.4, Math.max(0.55, cssW / 640));
+  c2.clearRect(0, 0, cssW, cssH);
+  c2.fillStyle = bgFill || '#FFFFFF';
+  c2.fillRect(0, 0, cssW, cssH);
+  /* Karo-Raster wie Millimeterpapier: kräftig hinter der Person (bei
+     freigestellten Fotos voll sichtbar), dezent über dem Foto */
+  const cell = Math.max(16, Math.round(cssW / 22));
+  const grid = a => {
+    c2.strokeStyle = `rgba(105,120,130,${a})`; c2.lineWidth = 1;
+    c2.beginPath();
+    for(let gx = 0; gx <= cssW; gx += cell){ c2.moveTo(gx, 0); c2.lineTo(gx, cssH); }
+    for(let gy = 0; gy <= cssH; gy += cell){ c2.moveTo(0, gy); c2.lineTo(cssW, gy); }
+    c2.stroke();
+  };
+  grid(0.35);
+  c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
+  grid(0.10);
+  c2.lineCap = 'round'; c2.lineJoin = 'round';
+
+  const P = id => p[id] ? {x: p[id].x*s + ox, y: p[id].y*s + oy} : null;
+  const seg = (a, b, color, width, dash)=>{
+    if(!a || !b) return;
+    /* weißer Halo darunter -> Linie bleibt auf jedem Foto deutlich sichtbar */
+    c2.setLineDash(dash || []);
+    c2.strokeStyle = 'rgba(255,255,255,.85)'; c2.lineWidth = width + 2*u;
+    c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
+    c2.strokeStyle = color; c2.lineWidth = width;
+    c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
+    c2.setLineDash([]);
+  };
+  const IST = '#E0301E';                                      /* Ist-Linien (Patient): Rot */
+  const SOLL = '#00A94F';                                     /* Soll-Lotlinie: Grün */
+  const DOT = '#F2A93B';                                      /* Landmarken-Punkte: Orange-Gelb */
+  const plumbAt = (anchorX, anchorY) => {
+    const px = anchorX + pOff * s, py = anchorY;
+    const tr = pTilt * Math.PI / 180;
+    const dx = Math.sin(tr), dy = -Math.cos(tr);
+    const L = (cssW + cssH) * 2;
+    seg({x: px - dx*L, y: py - dy*L}, {x: px + dx*L, y: py + dy*L}, SOLL, 1.8*u);
+    if(interactive){
+      const onLine = yy => ({x: px + (yy - py)/dy * dx, y: yy});
+      const grip = (g, glyph) => {
+        c2.beginPath(); c2.arc(g.x, g.y, 13, 0, 7);
+        c2.fillStyle = 'rgba(255,255,255,.95)'; c2.fill();
+        c2.lineWidth = 2; c2.strokeStyle = SOLL; c2.stroke();
+        c2.fillStyle = SOLL;
+        c2.font = '700 13px system-ui, sans-serif';
+        c2.fillText(glyph, g.x - 7, g.y + 4.5);
+      };
+      grip(onLine(cssH - 46), '⇄');
+      grip(onLine(42), '↻');
+      if(Math.abs(pTilt) > 0.2){
+        const g = onLine(42);
+        c2.font = '600 10px "IBM Plex Mono", monospace';
+        c2.fillStyle = 'rgba(21,36,48,.75)';
+        c2.fillText(pTilt.toFixed(1).replace('.', ',') + '°', g.x + 17, g.y + 4);
+      }
+    }
+  };
+
+  if(VIEWS[v].family === 'side'){
+    const m=P('malleolus'), k=P('knee'), t=P('trochanter'), a=P('acromion'), tr=P('tragus');
+    if(m) plumbAt(m.x, m.y);
+    seg(m,k, IST, 2*u); seg(k,t, IST, 2*u); seg(t,a, IST, 2*u);
+    seg(a,tr, IST, 2*u);                       /* durchgezogen bis zum Ohr */
+  } else {
+    const hL=P('headL'), hR=P('headR'), sL=P('shL'), sR=P('shR'),
+          bL=P('hipL'), bR=P('hipR'), aL=P('ankL'), aR=P('ankR');
+    if(aL && aR){
+      const mid = {x:(aL.x+aR.x)/2, y:(aL.y+aR.y)/2};
+      plumbAt(mid.x, mid.y);
+      if(hL && hR) seg(mid, {x:(hL.x+hR.x)/2, y:(hL.y+hR.y)/2}, IST, 1.4*u);
+      seg(aL,aR, IST, 2*u);
+    }
+    seg(hL,hR, IST, 2*u);
+    seg(sL,sR, IST, 2*u);
+    seg(bL,bR, IST, 2*u);
+  }
+
+  /* Punkte */
+  for(const l of VIEWS[v].landmarks){
+    const q = P(l.id);
+    if(!q) continue;
+    /* kleiner gefüllter Punkt mit dünnem weißen Rand – verdeckt die
+       Anatomie nicht und markiert die exakte Position */
+    c2.beginPath(); c2.arc(q.x, q.y, 2.8*u, 0, 7);
+    c2.fillStyle = DOT; c2.fill();
+    c2.strokeStyle = 'rgba(255,255,255,.85)'; c2.lineWidth = 1*u; c2.stroke();
+    if(!showLabels) continue;
+    c2.font = '600 10px "IBM Plex Mono", monospace';
+    const tw = c2.measureText(l.short).width;
+    let lx = q.x + 9, ly = q.y - 16;
+    if(lx + tw + 10 > cssW) lx = q.x - tw - 19;
+    if(ly < 2) ly = q.y + 8;
+    c2.fillStyle = 'rgba(255,255,255,.92)';
+    if(c2.roundRect){ c2.beginPath(); c2.roundRect(lx, ly, tw+10, 16, 4); c2.fill(); }
+    else c2.fillRect(lx, ly, tw+10, 16);
+    c2.fillStyle = '#152430';
+    c2.fillText(l.short, lx+5, ly+11.5);
+  }
+
+  /* Mini-Legende unten links: Soll vs. Ist (skaliert mit dem Canvas) */
+  const lu = Math.max(0.7, u);
+  const ly0 = cssH - 22*lu;
+  c2.fillStyle = 'rgba(255,255,255,.88)';
+  if(c2.roundRect){ c2.beginPath(); c2.roundRect(8, ly0 - 6*lu, 150*lu, 21*lu, 6*lu); c2.fill(); }
+  else c2.fillRect(8, ly0 - 6*lu, 150*lu, 21*lu);
+  c2.strokeStyle = SOLL; c2.lineWidth = 1.8*lu;
+  c2.beginPath(); c2.moveTo(8 + 8*lu, ly0 + 4.5*lu); c2.lineTo(8 + 32*lu, ly0 + 4.5*lu); c2.stroke();
+  c2.strokeStyle = IST; c2.lineWidth = 2*lu;
+  c2.beginPath(); c2.moveTo(8 + 82*lu, ly0 + 4.5*lu); c2.lineTo(8 + 106*lu, ly0 + 4.5*lu); c2.stroke();
+  c2.fillStyle = '#152430'; c2.font = `600 ${(10*lu).toFixed(1)}px "IBM Plex Mono", monospace`;
+  c2.fillText('Soll', 8 + 36*lu, ly0 + 8*lu);
+  c2.fillText('Ist', 8 + 110*lu, ly0 + 8*lu);
+
+  /* Datumsstempel oben rechts – wandert mit dem Bild in jede Vorschau und jedes PDF */
+  if(dateLabel){
+    const du = Math.max(0.75, u);
+    c2.font = `600 ${(11*du).toFixed(1)}px "IBM Plex Mono", monospace`;
+    const tw = c2.measureText(dateLabel).width;
+    const bx = cssW - tw - 22*du, by = 8;
+    c2.fillStyle = 'rgba(255,255,255,.92)';
+    if(c2.roundRect){ c2.beginPath(); c2.roundRect(bx, by, tw + 14*du, 20*du, 6*du); c2.fill(); }
+    else c2.fillRect(bx, by, tw + 14*du, 20*du);
+    c2.fillStyle = '#152430';
+    c2.fillText(dateLabel, bx + 7*du, by + 14*du);
+  }
+}
+
+/* ============================================================
+   Editor: Bild laden/* ============================================================
+   Editor: Bild laden, platzieren, Lupe
+   ============================================================ */
+let lastObjURL = null;
+async function loadFile(file){
+  if(!file) return;
+  try{
+    img = await new Promise((res, rej)=>{
+      const el = new Image();
+      el.onload = ()=>res(el); el.onerror = ()=>rej(new Error('decode'));
+      el.src = URL.createObjectURL(file);
+    });
+    if(lastObjURL) URL.revokeObjectURL(lastObjURL);
+    lastObjURL = img.src;
+  }catch(e){
+    alert('Das Bild konnte nicht geladen werden. Bitte anderes Foto versuchen.');
+    return;
+  }
+  iw = img.naturalWidth; ih = img.naturalHeight;
+  const MAXWORK = 2200;                      /* 12-MP-Fotos intern verkleinern */
+  if(Math.max(iw, ih) > MAXWORK){
+    const kk = MAXWORK / Math.max(iw, ih);
+    const wc = document.createElement('canvas');
+    wc.width = Math.round(iw*kk); wc.height = Math.round(ih*kk);
+    wc.getContext('2d').drawImage(img, 0, 0, wc.width, wc.height);
+    img = wc; iw = wc.width; ih = wc.height;
+  }
+  loadSeq++; kiHints = {};
+  pts = {}; placeOrder = []; state = 'placing'; editingId = null;
+  z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); tiltReset(); bgReset();
+  $('sessDate').value = todayISO();
+  $('emptyState').style.display = 'none';
+  wrap.style.display = 'block';
+  $('guideBar').style.display = 'block';
+  $('resultsCard').style.display = 'block';
+  render(); updateGuide(); updateMetrics();
+  prewarmKI();
+  if(AUTO_KI) autoPrep();   /* erst freistellen, dann Punkte vorschlagen */
+}
+function guardUnsavedPhoto(){
+  if(img && state === 'done' && !exam){
+    if(editingId && sessions.some(x => x.id === editingId)) saveCurrentToVerlauf();
+    else if(confirm('Aktuelle Aufnahme zuerst in den Verlauf sichern?')) saveCurrentToVerlauf();
+  }
+}
+$('btnCam').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileCam').click(); });
+$('btnGal').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileGal').click(); });
+$('fileCam').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
+$('fileGal').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
+$('btnReplace').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileGal').click(); });
+
+function setView(v, silent){
+  if(!VIEWS[v] || v === view) return;
+  if(!silent && Object.keys(pts).length){
+    if(state === 'done' && !exam){
+      if(editingId && sessions.some(x => x.id === editingId)){
+        saveCurrentToVerlauf();     /* bereits gesicherter Eintrag: still aktualisieren */
+      } else if(confirm('Aufnahme in den Verlauf sichern und Ansicht wechseln?\n(Abbrechen = hier bleiben, nichts geht verloren)')){
+        saveCurrentToVerlauf();
+      } else return;
+    } else if(!confirm('Ansicht wechseln? Die unfertigen Punkte werden entfernt.')){
+      return;
+    }
+  }
+  view = v;
+  for(const b of document.querySelectorAll('#segRow button')){
+    const on = b.dataset.view === v;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on);
+  }
+  if(!silent){
+    pts = {}; placeOrder = []; editingId = null; kiHints = {};
+    z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset(); bgReset(); bgReset();
+    if(img){ state = 'placing'; render(); }
+    updateGuide(); updateMetrics();
+  }
+}
+document.querySelectorAll('#segRow button').forEach(b => {
+  b.addEventListener('click', ()=>{
+    if(exam){ alert('Während einer Untersuchung wechselt die Ansicht automatisch.'); return; }
+    setView(b.dataset.view);
+  });
+});
+
+function layout(){
+  const cssW0 = wrap.clientWidth;
+  let w = cssW0, h = cssW0 * ih / iw;
+  const maxH = Math.round(window.innerHeight * 0.72);
+  if(h > maxH){ h = maxH; w = h * iw / ih; }
+  const dpr = window.devicePixelRatio || 1;
+  stage.style.width  = w + 'px';
+  stage.style.height = h + 'px';
+  stage.style.margin = '0 auto';
+  if(stage.width !== Math.round(w*dpr) || stage.height !== Math.round(h*dpr)){
+    stage.width = Math.round(w*dpr); stage.height = Math.round(h*dpr);
+  }
+  return {w, h, dpr};
+}
+function toImgXY(clientX, clientY){
+  const r = stage.getBoundingClientRect();
+  const s2 = (r.width / iw) * z;
+  return {
+    x: Math.min(iw, Math.max(0, (clientX - r.left - tx) / s2)),
+    y: Math.min(ih, Math.max(0, (clientY - r.top  - ty) / s2))
+  };
+}
+function toImg(e){ return toImgXY(e.clientX, e.clientY); }
+function clampPan(cw, ch){
+  if(z <= 1.001){ z = 1; tx = 0; ty = 0; return; }
+  tx = Math.min(0, Math.max(cw - cw*z, tx));
+  ty = Math.min(0, Math.max(ch - ch*z, ty));
+}
+function updateZoomChip(){
+  const c = $('zoomChip');
+  if(z > 1.01){ c.hidden = false; c.textContent = z.toFixed(1).replace('.', ',') + '× · Reset'; }
+  else c.hidden = true;
+}
+$('zoomChip').addEventListener('click', ()=>{ z = 1; tx = 0; ty = 0; updateZoomChip(); render(); });
+function render(){
+  if(!img) return;
+  const {w, h, dpr} = layout();
+  clampPan(w, h);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  paintAnalysis(ctx, img, iw, ih, pts, view, w, h, z, tx, ty, state !== 'done', fmtDate($('sessDate').value || todayISO()), plumbOff, state === 'done', plumbTilt);
+  placeLmHelpBox();
+}
+
+/* ---------- Lade-Anzeige ---------- */
+function busyShow(t){ $('busyTxt').textContent = t; $('busy').hidden = false; }
+function busyHide(){ $('busy').hidden = true; }
+
+/* ---------- Setz-Hilfe: wo genau sitzt der Punkt? ---------- */
+const LM_HELP = {
+  tragus: '<img src="data:image/jpeg;base64,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" alt="">',
+  acromion: '<img src="data:image/jpeg;base64,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" alt="">',
+  trochanter: '<img src="data:image/jpeg;base64,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" alt="">',
+  knee: '<img src="data:image/jpeg;base64,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" alt="">',
+  malleolus: '<img src="data:image/jpeg;base64,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" alt="">',
+  eyeF: '<img src="data:image/jpeg;base64,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" alt="">',
+  earF: '<img src="data:image/jpeg;base64,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" alt="">',
+  shF: '<img src="data:image/jpeg;base64,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" alt="">',
+  hipF: '<img src="data:image/jpeg;base64,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" alt="">',
+  ankF: '<img src="data:image/jpeg;base64,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" alt="">'
+};
+/* Native Ausrichtung der Hilfsfotos: side = Blickrichtung der Person,
+   pairs = Bildseite, auf der das Merkmal liegt ('C' = mittig, nie spiegeln) */
+const LM_HELP_META = {
+  tragus:{fam:'side', face:'L'}, acromion:{fam:'side', face:'L'},
+  trochanter:{fam:'side', face:'L'}, knee:{fam:'side', face:'L'},
+  malleolus:{fam:'side', face:'R'},
+  eyeF:{fam:'pair', native:'C'}, earF:{fam:'pair', native:'R'},
+  shF:{fam:'pair', native:'R'}, hipF:{fam:'pair', native:'L'},
+  ankF:{fam:'pair', native:'C'}
+};
+function photoFacing(){
+  const t = pts.tragus || kiHints.tragus;
+  const a = pts.acromion || kiHints.acromion || pts.trochanter || kiHints.trochanter;
+  if(t && a && Math.abs(t.x - a.x) > 2) return Math.sign(t.x - a.x);
+  return view === 'sideL' ? -1 : 1;
+}
+function helpFlip(l, key){
+  const meta = LM_HELP_META[key];
+  if(!meta) return false;
+  if(meta.fam === 'side'){
+    const f = photoFacing();                     /* +1 = blickt nach rechts */
+    return (f > 0 && meta.face === 'L') || (f < 0 && meta.face === 'R');
+  }
+  if(meta.native === 'C') return false;
+  const side = l.id.endsWith('L') ? 'L' : 'R';
+  return side !== meta.native;
+}
+
+function helpKeyFor(l){
+  if(!l) return null;
+  if(l.id === 'headL' || l.id === 'headR') return VIEWS[view].headKp === 'ear' ? 'earF' : 'eyeF';
+  if(l.id === 'shL' || l.id === 'shR') return 'shF';
+  if(l.id === 'hipL' || l.id === 'hipR') return 'hipF';
+  if(l.id === 'ankL' || l.id === 'ankR') return 'ankF';
+  return LM_HELP[l.id] ? l.id : null;
+}
+let lmAnchor = null;
+function showLmHelp(l, anchor){
+  const k = helpKeyFor(l);
+  if(!k){ $('lmHelp').hidden = true; lmAnchor = null; return; }
+  $('lmHelpArt').innerHTML = LM_HELP[k];
+  const hi = $('lmHelpArt').querySelector('img');
+  if(hi) hi.classList.toggle('flip', helpFlip(l, k));
+  $('lmHelpCap').textContent = l.short + ' – rotes ✕';
+  lmAnchor = anchor || null;
+  $('lmHelp').hidden = false;
+  placeLmHelpBox();
+}
+function hideLmHelp(){ $('lmHelp').hidden = true; lmAnchor = null; }
+
+/* Karte neben die echte Körperstelle setzen (Pfeil zeigt hin) */
+function placeLmHelpBox(){
+  const box = $('lmHelp');
+  if(box.hidden) return;
+  box.classList.remove('pl','pr');
+  if(!lmAnchor || !img){
+    box.style.left = 'auto'; box.style.right = '10px'; box.style.top = '10px';
+    return;
+  }
+  const wr = wrap.getBoundingClientRect();
+  const r = stage.getBoundingClientRect();
+  const s2 = (r.width / iw) * z;
+  const ax = lmAnchor.x*s2 + tx + (r.left - wr.left);
+  const ay = lmAnchor.y*s2 + ty + (r.top  - wr.top);
+  const bw = box.offsetWidth || 94, bh2 = box.offsetHeight || 118;
+  let left = ax + 28, cls = 'pl';
+  if(left + bw > wr.width - 6){ left = ax - 28 - bw; cls = 'pr'; }
+  left = Math.max(6, Math.min(wr.width - bw - 6, left));
+  const top = Math.max(8, Math.min(wr.height - bh2 - 8, ay - bh2/2));
+  box.style.right = 'auto';
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
+  box.classList.add(cls);
+}
+
+/* ---------- Lupe ---------- */
+function showLoupe(){ loupe.style.display = 'block'; }
+function hideLoupe(){ loupe.style.display = 'none'; }
+function updateLoupe(imgPos){
+  const r = stage.getBoundingClientRect();
+  const wr = wrap.getBoundingClientRect();
+  const s2 = (r.width / iw) * z;
+  const cssX = imgPos.x*s2 + tx + (r.left - wr.left);
+  const cssY = imgPos.y*s2 + ty + (r.top  - wr.top);
+  let lx = cssX - 66, ly = cssY - 66 - 92;
+  if(ly < 4) ly = cssY + 40;
+  lx = Math.max(4, Math.min(wr.width - 136, lx));
+  loupe.style.left = lx + 'px';
+  loupe.style.top  = ly + 'px';
+
+  const zoom = Math.max(s2 * 2.2, (r.width / iw) * 3);
+  const srcW = 132 / zoom;
+  const sx = imgPos.x - srcW/2, sy = imgPos.y - srcW/2;
+  lctx.setTransform(1,0,0,1,0,0);
+  lctx.fillStyle = '#000'; lctx.fillRect(0,0,132,132);
+  try{ lctx.drawImage(img, sx, sy, srcW, srcW, 0, 0, 132, 132); }catch(e){}
+  lctx.strokeStyle = 'rgba(15,118,110,.95)'; lctx.lineWidth = 1;
+  lctx.beginPath(); lctx.moveTo(66,10); lctx.lineTo(66,54); lctx.moveTo(66,78); lctx.lineTo(66,122);
+  lctx.moveTo(10,66); lctx.lineTo(54,66); lctx.moveTo(78,66); lctx.lineTo(122,66); lctx.stroke();
+  lctx.fillStyle = '#F2A93B';
+  lctx.beginPath(); lctx.arc(66,66,2.4,0,7); lctx.fill();
+  const nt = nextTarget();
+  const name = (state==='placing' && nt) ? nt.short
+             : (dragId ? (lm().find(l=>l.id===dragId)||{}).short : '');
+  if(name){
+    lctx.font = '600 11px "IBM Plex Mono", monospace';
+    const tw = lctx.measureText(name).width;
+    lctx.fillStyle = 'rgba(21,36,48,.85)';
+    lctx.fillRect(66-tw/2-6, 106, tw+12, 18);
+    lctx.fillStyle = '#fff'; lctx.fillText(name, 66-tw/2, 119);
+  }
+}
+
+/* ---------- Zeigereingaben ---------- */
+function hitPoint(pos){
+  const r = stage.getBoundingClientRect();
+  const th = 26 / ((r.width / iw) * z);
+  let best = null, bd = th;
+  for(const id in pts){
+    const d = Math.hypot(pts[id].x - pos.x, pts[id].y - pos.y);
+    if(d < bd){ bd = d; best = id; }
+  }
+  return best;
+}
+stage.addEventListener('pointerdown', e => {
+  if(!img) return;
+  e.preventDefault();
+  try{ stage.setPointerCapture(e.pointerId); }catch(_){}
+  activePtrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+
+  if(activePtrs.size === 2){
+    /* Zweiter Finger: laufende 1-Finger-Geste abbrechen, Pinch starten */
+    if(gesture === 'move' && dragId && moveOrig) pts[dragId] = moveOrig;
+    hideLoupe();
+    const [a, b] = [...activePtrs.values()];
+    const mid = {x: (a.x+b.x)/2, y: (a.y+b.y)/2};
+    pinchRef = {d0: Math.hypot(a.x-b.x, a.y-b.y) || 1, z0: z, q: toImgXY(mid.x, mid.y)};
+    gesture = 'pinch'; gestureId = null; dragId = null; moveOrig = null;
+    render();
+    return;
+  }
+  if(activePtrs.size > 2){ gesture = 'dead'; hideLoupe(); return; }
+  if(gesture === 'dead') return;
+
+  /* Erster Finger */
+  const pos = toImg(e);
+  if(state === 'placing'){
+    gesture = 'place'; gestureId = e.pointerId; lastPos = pos;
+    showLoupe(); updateLoupe(pos);
+  } else if(state === 'done'){
+    const hit = hitPoint(pos);
+    if(hit){
+      gesture = 'move'; gestureId = e.pointerId; dragId = hit;
+      moveOrig = {x: pts[hit].x, y: pts[hit].y};
+      lastPos = pos; pts[hit] = pos;
+      showLmHelp(lm().find(x => x.id === hit), moveOrig);
+      showLoupe(); updateLoupe(pos); render();
+    } else {
+      const ax = plumbAnchorX(), ay = plumbAnchorY();
+      const r2 = stage.getBoundingClientRect();
+      const s2 = (r2.width / iw) * z;
+      if(ax !== null && ay !== null){
+        const scr = {x: e.clientX - r2.left, y: e.clientY - r2.top};
+        const pv = {x: ax*s2 + tx + plumbOff*s2, y: ay*s2 + ty};
+        const tr = plumbTilt * Math.PI / 180;
+        const dx = Math.sin(tr), dy = -Math.cos(tr);
+        const gTop = {x: pv.x + (42 - pv.y)/dy * dx, y: 42};
+        if(Math.hypot(scr.x - gTop.x, scr.y - gTop.y) < 26){
+          gesture = 'plumbRot'; gestureId = e.pointerId;
+          return;
+        }
+        const distToLine = Math.abs((scr.x - pv.x)*dy - (scr.y - pv.y)*dx);
+        if(distToLine < 16){
+          gesture = 'plumb'; gestureId = e.pointerId;
+          plumbGrabDX = pos.x - (ax + plumbOff);
+          return;
+        }
+      }
+      if(z > 1.01){
+        gesture = 'pan'; gestureId = e.pointerId;
+        lastPos = {cx: e.clientX, cy: e.clientY};
+      }
+    }
+  }
+});
+
+stage.addEventListener('pointermove', e => {
+  if(!activePtrs.has(e.pointerId)) return;
+  activePtrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+
+  if(gesture === 'pinch'){
+    if(activePtrs.size < 2) return;
+    e.preventDefault();
+    const [a, b] = [...activePtrs.values()];
+    const mid = {x: (a.x+b.x)/2, y: (a.y+b.y)/2};
+    const d = Math.hypot(a.x-b.x, a.y-b.y) || 1;
+    z = Math.min(6, Math.max(1, pinchRef.z0 * d / pinchRef.d0));
+    const r = stage.getBoundingClientRect();
+    const s2 = (r.width / iw) * z;
+    tx = (mid.x - r.left) - pinchRef.q.x * s2;
+    ty = (mid.y - r.top ) - pinchRef.q.y * s2;
+    clampPan(r.width, r.height);
+    render(); updateZoomChip();
+    return;
+  }
+  if(e.pointerId !== gestureId) return;
+  e.preventDefault();
+  if(gesture === 'place'){
+    lastPos = toImg(e); updateLoupe(lastPos);
+  } else if(gesture === 'move'){
+    lastPos = toImg(e); pts[dragId] = lastPos;
+    render(); updateLoupe(lastPos);
+  } else if(gesture === 'plumb'){
+    const ax = plumbAnchorX();
+    if(ax !== null){
+      plumbOff = toImg(e).x - ax - plumbGrabDX;
+      render();
+    }
+  } else if(gesture === 'plumbRot'){
+    const ax = plumbAnchorX(), ay = plumbAnchorY();
+    if(ax !== null && ay !== null){
+      const r2 = stage.getBoundingClientRect();
+      const s2 = (r2.width / iw) * z;
+      const pv = {x: ax*s2 + tx + plumbOff*s2, y: ay*s2 + ty};
+      const scr = {x: e.clientX - r2.left, y: e.clientY - r2.top};
+      if(pv.y - scr.y > 40){
+        let t = deg(Math.atan2(scr.x - pv.x, pv.y - scr.y));
+        if(Math.abs(t) < 0.7) t = 0;
+        plumbTilt = Math.max(-20, Math.min(20, t));
+        render(); updateMetrics();
+      }
+    }
+  } else if(gesture === 'pan'){
+    tx += e.clientX - lastPos.cx; ty += e.clientY - lastPos.cy;
+    lastPos = {cx: e.clientX, cy: e.clientY};
+    const r = stage.getBoundingClientRect();
+    clampPan(r.width, r.height); render();
+  }
+});
+
+function ptrEnd(e, cancelled){
+  activePtrs.delete(e.pointerId);
+  if(gesture === 'pinch'){
+    if(activePtrs.size < 2){ gesture = activePtrs.size ? 'dead' : null; pinchRef = null; }
+    return;
+  }
+  if(gesture === 'dead'){ if(!activePtrs.size) gesture = null; return; }
+  if(e.pointerId !== gestureId) return;
+
+  if(gesture === 'place' && lastPos && !cancelled){
+    const nt = nextTarget();
+    if(nt){ pts[nt.id] = lastPos; placeOrder.push(nt.id); }
+    if(!nextTarget()) state = 'done';
+    updateGuide();
+  }
+  if(gesture === 'move' && cancelled && dragId && moveOrig) pts[dragId] = moveOrig;
+  updateMetrics();
+  gesture = null; gestureId = null; dragId = null; moveOrig = null; lastPos = null;
+  hideLoupe(); render();
+}
+stage.addEventListener('pointerup', e => { e.preventDefault(); ptrEnd(e, false); });
+stage.addEventListener('pointercancel', e => { ptrEnd(e, true); });
+
+/* ---------- Führung ---------- */
+function updateGuide(){
+  const list = lm();
+  $('guideDots').innerHTML = list.map(l=>`<i class="${pts[l.id] ? 'on':''}"></i>`).join('');
+  const nt = nextTarget();
+  if(state === 'placing' && nt){
+    const modus = exam ? `Untersuchung ${exam.idx+1}/${exam.len}` : 'Einzelaufnahme';
+    $('guideStep').textContent = `${modus} · Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
+    showLmHelp(nt, kiHints[nt.id] || null);
+    $('guideName').textContent = `Tippe auf: ${nt.name}`;
+    $('guideHint').textContent = nt.hint + ' Finger gedrückt halten und mit der Lupe fein ausrichten, dann loslassen. Zwei Finger: zoomen.';
+  } else if(state === 'done'){
+    kiMsgHide();
+    const modus = exam ? `Untersuchung ${exam.idx+1}/${exam.len}` : 'Einzelaufnahme';
+    $('guideStep').textContent = `${modus} · ${VIEWS[view].label} · vollständig`;
+    hideLmHelp();
+    $('guideName').textContent = 'Fertig – Punkte prüfen';
+    $('guideHint').textContent = exam
+      ? 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann „Speichern & weiter".'
+      : 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann sichern.';
+  }
+  $('btnUndo').disabled = placeOrder.length === 0;
+  $('btnKI').hidden = !(img && state === 'placing' && placedCount() === 0);
+  $('btnBG').hidden = !img;
+  $('quickRow').hidden = !(!exam && img && state === 'done');
+  $('btnQuickSave').textContent = quickSaveLabel();
+  updateAddBtn(); updateExamUI();
+}
+$('btnUndo').addEventListener('click', ()=>{
+  const id = placeOrder.pop();
+  if(!id) return;
+  delete pts[id]; state = 'placing'; kiMsgHide();
+  updateGuide(); updateMetrics(); render();
+});
+$('btnRestart').addEventListener('click', ()=>{
+  if(Object.keys(pts).length && !confirm('Alle Punkte entfernen?')) return;
+  pts = {}; placeOrder = []; state = 'placing'; kiMsgHide();
+  updateGuide(); updateMetrics(); render();
+});
+
+/* ---------- Messwert-Anzeige ---------- */
+function updateMetrics(){
+  currentMetrics = computeMetricsFor(view, pts, plumbTilt);
+  $('metricsList').innerHTML = currentMetrics.map(m => `
+    <div class="metric ${m.available ? '' : 'miss'}">
+      <div>
+        <div class="n">${m.name}</div>
+        <div class="norm">${m.norm}</div>
+      </div>
+      <div>
+        <div class="v mono">${m.txt}</div>
+        <div class="sub ${m.st ? 'st-'+m.st : ''}">${m.available ? (m.sub + ' · ' + stWord[m.st]) : m.sub}</div>
+      </div>
+    </div>`).join('');
+  $('btnReport').disabled = !currentMetrics.some(m => m.available);
+  const qm = $('quickMetrics');
+  if(state === 'done' && currentMetrics.some(m => m.available)){
+    qm.innerHTML = currentMetrics.filter(m => m.available).map(m =>
+      `<span class="st-${m.st}">${m.name.split(' ·')[0]} ${m.txt}</span>`).join('');
+    qm.hidden = false;
+  } else qm.hidden = true;
+  $('legalLine').textContent = (VIEWS[view].family === 'pairs'
+    ? 'Seitenangaben beziehen sich auf die Bildansicht. ' : '')
+    + 'Grün = Soll (Lot) · Rot = Ist. Richtwerte dienen der Orientierung. Dokumentationshilfe – keine medizinische Diagnose.';
+  updateAddBtn();
+}
+function updateAddBtn(){
+  const b = $('btnAddSession');
+  b.style.display = exam ? 'none' : '';
+  $('btnReport').style.display = exam ? 'none' : '';
+  b.disabled = !(img && state === 'done');
+  b.textContent = (editingId && sessions.some(s=>s.id===editingId))
+    ? 'Änderungen in Verlaufsliste übernehmen'
+    : 'Zur Verlaufsliste hinzufügen';
+}
+
+/* ============================================================
+   Verlaufsliste
+   ============================================================ */
+function snapshotSession(){
+  const maxE = 1400;
+  const k = Math.min(1, maxE / Math.max(iw, ih));
+  const w = Math.round(iw*k), h = Math.round(ih*k);
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+  oc.getContext('2d').drawImage(img, 0, 0, w, h);
+  const p2 = {};
+  for(const id in pts) p2[id] = {x: pts[id].x*k, y: pts[id].y*k};
+  const mime = imgAlpha ? 'image/png' : 'image/jpeg';
+  return {
+    id: editingId || ('s' + Date.now() + Math.random().toString(36).slice(2,6)),
+    dateStr: $('sessDate').value || todayISO(),
+    created: Date.now(),
+    patient: $('patient').value.trim(),
+    view, notes: $('notes').value.trim(),
+    imgData: oc.toDataURL(mime, 0.85),
+    alpha: imgAlpha,
+    iw: w, ih: h, pts: p2, plumbOff: plumbOff * k, plumbTilt
+  };
+}
+function sortedSessions(){
+  return [...sessions].sort((a,b)=>
+    a.dateStr === b.dateStr ? a.created - b.created : (a.dateStr < b.dateStr ? -1 : 1));
+}
+
+function saveCurrentToVerlauf(){
+  if(!(img && state === 'done')) return null;
+  const s = snapshotSession();
+  const i = sessions.findIndex(x => x.id === s.id);
+  if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
+  else sessions.push(s);
+  editingId = s.id;
+  delete imgCache[s.id]; delete cutCache[s.id];
+  renderSessions(); updateAddBtn();
+  return s;
+}
+$('btnAddSession').addEventListener('click', ()=>{
+  if(!saveCurrentToVerlauf()) return;
+  const b = $('btnAddSession');
+  b.textContent = '✓ Gesichert'; setTimeout(()=>{ updateAddBtn(); }, 1200);
+});
+$('btnQuickSave').addEventListener('click', ()=>{
+  if(!saveCurrentToVerlauf()) return;
+  const b = $('btnQuickSave');
+  b.textContent = '✓ Gesichert';
+  setTimeout(()=>{ b.textContent = quickSaveLabel(); }, 1200);
+});
+function quickSaveLabel(){
+  return (editingId && sessions.some(x => x.id === editingId))
+    ? '✓ Änderungen sichern' : '✓ Aufnahme in Verlauf sichern';
+}
+
+function renderSessions(){
+  const list = sortedSessions();
+  const el = $('histList');
+  for(const id of [...selIds]) if(!sessions.some(s=>s.id===id)) selIds.delete(id);
+  if(!list.length){
+    el.innerHTML = `<div class="hist-empty">Noch keine Aufnahmen. Analysierte Fotos hier sichern
+      oder gespeicherte Lotlinie-Dateien (.json) importieren – z.&nbsp;B. für Vorher-Nachher-Vergleiche.</div>`;
+  } else {
+    el.innerHTML = list.map(s => `
+      <div class="hist-row" data-id="${s.id}">
+        <input type="checkbox" ${selIds.has(s.id) ? 'checked' : ''} aria-label="Für Vergleich auswählen">
+        <div class="hist-main">
+          <div class="hist-t"><span class="mono">${fmtDate(s.dateStr)}</span>
+            <span class="viewtag">${VIEWS[s.view].label}</span>
+            ${s.id === editingId ? '<span class="viewtag" style="background:rgba(169,112,15,.12);color:#8a5c0a">geöffnet</span>' : ''}
+          </div>
+          <div class="hist-sub">${esc(s.patient || 'ohne Name')}${s.notes ? ' · ' + esc(s.notes) : ''}</div>
+        </div>
+        <button class="iconbtn" data-act="export" title="Als Datei exportieren" aria-label="Exportieren">⬇</button>
+        <button class="iconbtn" data-act="del" title="Löschen" aria-label="Löschen">✕</button>
+      </div>`).join('');
+  }
+  updateHistFoot();
+}
+function updateHistFoot(){
+  const n = selIds.size;
+  $('btnCompare').disabled = (n === 1) || (n === 0 && sessions.length < 2);
+  $('btnCompare').textContent = n >= 2 ? `Vergleichen (${n})` : 'Vergleichen';
+  $('btnExportAll').disabled = !sessions.length;
+}
+
+$('histList').addEventListener('click', e => {
+  const row = e.target.closest('.hist-row');
+  if(!row) return;
+  const id = row.dataset.id;
+  const s = sessions.find(x => x.id === id);
+  if(!s) return;
+  if(e.target.matches('input[type=checkbox]')){
+    e.target.checked ? selIds.add(id) : selIds.delete(id);
+    updateHistFoot();
+    return;
+  }
+  const act = e.target.dataset && e.target.dataset.act;
+  if(act === 'del'){
+    if(!confirm(`Aufnahme vom ${fmtDate(s.dateStr)} löschen?`)) return;
+    sessions = sessions.filter(x => x.id !== id);
+    selIds.delete(id); delete imgCache[id]; delete cutCache[id];
+    if(editingId === id) editingId = null;
+    renderSessions(); updateAddBtn();
+    return;
+  }
+  if(act === 'export'){ exportSessions([s]); return; }
+  loadSession(s);   // Tipp auf den Eintrag: in den Editor laden
+});
+
+function loadSession(s){
+  const im = new Image();
+  im.onload = ()=>{
+    loadSeq++; kiHints = {};           /* entwertet laufende Auto-Verarbeitung des vorigen Fotos */
+    img = im; iw = s.iw; ih = s.ih;
+    pts = {}; for(const id in s.pts) pts[id] = {x:s.pts[id].x, y:s.pts[id].y};
+    setView(s.view, true);
+    view = s.view;
+    placeOrder = VIEWS[s.view].landmarks.filter(l => pts[l.id]).map(l => l.id);
+    plumbOff = s.plumbOff || 0;
+    plumbTilt = s.plumbTilt || 0;
+    bgReset();
+    imgAlpha = !!s.alpha;
+    state = nextTarget() ? 'placing' : 'done';
+    z = 1; tx = 0; ty = 0; updateZoomChip(); kiMsgHide();
+    editingId = s.id;
+    $('patient').value = s.patient || '';
+    $('notes').value = s.notes || '';
+    $('sessDate').value = s.dateStr || todayISO();
+    $('emptyState').style.display = 'none';
+    wrap.style.display = 'block';
+    $('guideBar').style.display = 'block';
+    $('resultsCard').style.display = 'block';
+    render(); updateGuide(); updateMetrics(); renderSessions();
+    wrap.scrollIntoView({behavior:'smooth', block:'start'});
+  };
+  im.src = s.imgData;
+}
+
+/* ---------- Export / Import ---------- */
+function download(name, text){
+  const b = new Blob([text], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 4000);
+}
+function safeName(s){ return (s || 'ohne_name').replace(/[^\wäöüÄÖÜß-]+/g, '_').slice(0, 40); }
+async function deliverFile(name, text){
+  try{
+    const file = new File([text], name, {type:'application/json'});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      await navigator.share({files:[file], title:name});
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  download(name, text);
+}
+function exportSessions(list, nameOverride){
+  const payload = JSON.stringify({app:'lotlinie', version:1, sessions:list});
+  const one = list.length === 1 ? list[0] : null;
+  const name = nameOverride || (one
+    ? `lotlinie_${safeName(one.patient)}_${one.dateStr}_${one.view}.json`
+    : `lotlinie_verlauf_${todayISO()}.json`);
+  deliverFile(name, payload);
+}
+$('btnExportAll').addEventListener('click', ()=> exportSessions(sortedSessions()));
+$('btnImport').addEventListener('click', ()=> $('fileImport').click());
+$('fileImport').addEventListener('change', async e => {
+  let added = 0, failed = 0;
+  for(const f of e.target.files){
+    try{
+      const data = JSON.parse(await f.text());
+      const arr = Array.isArray(data.sessions) ? data.sessions : [data];
+      for(const s of arr){
+        if(s && s.view && LEGACY_VIEW[s.view]){
+          s.view = LEGACY_VIEW[s.view];
+          if(s.pts){ for(const [o,n] of [['eyeL','headL'],['eyeR','headR']])
+            if(s.pts[o]){ s.pts[n] = s.pts[o]; delete s.pts[o]; } }
+        }
+        if(s && typeof s.imgData === 'string' && s.imgData.startsWith('data:image')
+           && s.pts && VIEWS[s.view] && s.iw > 0 && s.ih > 0){
+          if(!s.id) s.id = 's' + Date.now() + Math.random().toString(36).slice(2,6);
+          if(!s.dateStr) s.dateStr = todayISO();
+          if(!s.created) s.created = Date.now();
+          if(!sessions.some(x => x.id === s.id)) { sessions.push(s); added++; }
+        } else failed++;
+      }
+    }catch(_){ failed++; }
+  }
+  e.target.value = '';
+  renderSessions();
+  if(failed) alert(`${added} Aufnahme(n) importiert, ${failed} Datei(en)/Einträge konnten nicht gelesen werden.`);
+});
+
+/* ============================================================
+   Vergleich
+   ============================================================ */
+function ensureImg(s){
+  if(imgCache[s.id]) return Promise.resolve(imgCache[s.id]);
+  return new Promise((res, rej)=>{
+    const im = new Image();
+    im.onload = ()=>{ imgCache[s.id] = im; res(im); };
+    im.onerror = rej;
+    im.src = s.imgData;
+  });
+}
+
+$('btnCompare').addEventListener('click', async ()=>{
+  let sel = sortedSessions().filter(s => selIds.has(s.id));
+  if(sel.length < 2) sel = sortedSessions();   /* nichts angehakt: einfach alles vergleichen */
+  if(sel.length < 2) return;
+  const vset = new Set(sel.map(s => s.view));
+  if(vset.size > 1){
+    const dates = [...new Set(sel.map(s => s.dateStr))].sort();
+    if(dates.length === 2){
+      buildExamComparePDF(sel, dates);   /* gemeinsame Ansichten beider Termine, Rest fällt weg */
+    } else {
+      alert('Untersuchungs-Vergleich braucht genau zwei Termine. Bitte die Aufnahmen von zwei Terminen anhaken.');
+    }
+    return;
+  }
+  const pset = [...new Set(sel.map(s => (s.patient||'').trim()).filter(Boolean))];
+  if(pset.length > 1 && !confirm('Achtung: Die Aufnahmen tragen unterschiedliche Namen ('
+      + pset.join(', ') + '). Trotzdem vergleichen?')) return;
+
+  cmpSel = sel;
+  const v = sel[0].view;
+  $('cmpTitle').textContent = `Vergleich · ${VIEWS[v].label} · ${fmtDate(sel[0].dateStr)} → ${fmtDate(sel[sel.length-1].dateStr)}`;
+
+  /* Bilder */
+  const imgsEl = $('cmpImgs');
+  imgsEl.innerHTML = sel.map((s,i)=>`
+    <div class="cmpitem">
+      <canvas data-i="${i}"></canvas>
+      <div class="cmpcap mono">${fmtDate(s.dateStr)}</div>
+    </div>`).join('');
+  await Promise.all(sel.map(async (s, i)=>{
+    const im = await ensureImg(s);
+    const cv = imgsEl.querySelector(`canvas[data-i="${i}"]`);
+    const cssW = cv.parentElement.clientWidth || 240;
+    const cssH = Math.round(cssW * s.ih / s.iw);
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+    cv.style.height = cssH + 'px';
+    const c2 = cv.getContext('2d');
+    c2.setTransform(dpr,0,0,dpr,0,0);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+  }));
+
+  /* Tabelle */
+  buildCompareTable(sel, v, $('cmpTable'), false);
+  $('cmpLegal').textContent = 'Veränderung: älteste → neueste Aufnahme. '
+    + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '')
+    + 'Richtwerte dienen der Orientierung. Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus.';
+  $('compareCard').style.display = 'block';
+  $('compareCard').scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+function buildCompareTable(sel, v, tableEl, forPrint){
+  const per = sel.map(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0));
+  const head = `<thead><tr><th>Messwert</th>`
+    + sel.map(s => `<th>${fmtDate(s.dateStr)}</th>`).join('')
+    + `<th>Veränderung</th></tr></thead>`;
+  const rows = per[0].map((m0, mi)=>{
+    const cells = per.map(ms => {
+      const m = ms[mi];
+      return `<td class="mono ${m.st ? 'st-'+m.st : ''}">${m.available ? m.txt : '–'}</td>`;
+    }).join('');
+    const first = per[0][mi], last = per[per.length-1][mi];
+    let dcell = '<td class="delta st-none">–</td>';
+    if(first.available && last.available){
+      const d = deltaInfo(m0.cmp, first.val, last.val);
+      dcell = `<td class="delta st-${d.st}">${d.txt}<br><span style="font-size:10.5px">${d.word}</span></td>`;
+    }
+    return `<tr><td>${m0.name}</td>${cells}${dcell}</tr>`;
+  }).join('');
+  tableEl.innerHTML = head + `<tbody>${rows}</tbody>`;
+}
+
+$('btnCmpClose').addEventListener('click', ()=>{
+  $('compareCard').style.display = 'none'; cmpSel = [];
+});
+
+/* ============================================================
+   Berichte
+   ============================================================ */
+$('btnReport').addEventListener('click', ()=>{
+  const rw = Math.min(900, iw), rh = Math.round(rw * ih / iw);
+  const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+  paintAnalysis(oc.getContext('2d'), img, iw, ih, pts, view, rw, rh, 1, 0, 0, false, fmtDate($('sessDate').value || todayISO()), plumbOff, false, plumbTilt, '#FFFFFF');
+  const shot = oc.toDataURL('image/jpeg', 0.92);
+  const name = $('patient').value.trim() || '—';
+  const notes = $('notes').value.trim();
+  const rows = currentMetrics.filter(m => m.available).map(m => `
+    <tr><td>${m.name}</td>
+        <td><b class="mono">${m.txt}</b></td>
+        <td>${m.sub}</td>
+        <td>${m.norm} · ${stWord[m.st]}</td></tr>`).join('');
+  $('report').innerHTML = `
+    <div class="rb">Lot&nbsp;|&nbsp;Linie · Haltungsanalyse</div>
+    <div class="meta">
+      <span><b>Patient·in:</b> ${esc(name)}</span>
+      <span><b>Aufnahmedatum:</b> ${fmtDate($('sessDate').value)}</span>
+      <span><b>Erstellt:</b> ${fmtDate(todayISO())}, ${nowTime()} Uhr</span>
+      <span><b>Ansicht:</b> ${VIEWS[view].label}</span>
+    </div>
+    <img class="single" src="${shot}" alt="Analysiertes Haltungsfoto">
+    <table>
+      <tr><th>Messwert</th><th>Wert</th><th>Einordnung</th><th>Richtwert</th></tr>
+      ${rows}
+    </table>
+    ${notes ? `<p><b>Notizen:</b> ${esc(notes)}</p>` : ''}
+    <div class="sig">Datum, Unterschrift</div>
+    <div class="disc">Interne Dokumentationshilfe. Richtwerte dienen der Orientierung und ersetzen keine
+    klinische Beurteilung oder Diagnostik. ${VIEWS[view].family==='pairs' ? 'Seitenangaben aus Bildsicht. ' : ''}Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.</div>`;
+  window.print();
+});
+
+/* (Druckweg entfernt: der Vergleich erzeugt direkt ein teilbares PDF) */
+
+/* ============================================================
+   KI-Vorschlag (Beta): MoveNet schlägt Startpositionen vor,
+   alle Punkte bleiben per Hand korrigierbar. Läuft komplett
+   im Browser; Modell (~7 MB) wird einmalig vom CDN geladen.
+   ============================================================ */
+function kiMsgShow(t){ const m = $('kiMsg'); m.textContent = t; m.hidden = false; }
+function kiMsgHide(){ $('kiMsg').hidden = true; }
+
+let kiPromise = null;
+function loadScript(srcUrl){
+  return new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = srcUrl; s.onload = res; s.onerror = ()=>rej(new Error('Netzwerkfehler: ' + srcUrl));
+    document.head.appendChild(s);
+  });
+}
+/* mehrere CDNs durchprobieren – einzelne Server können blockiert sein (Firmennetz) */
+async function loadAny(urls){
+  let err = null;
+  for(const u2 of urls){ try{ await loadScript(u2); return; }catch(e){ err = e; } }
+  throw err || new Error('Netzwerkfehler');
+}
+/* tf.js nur einmal laden – Pose-Erkennung und Freistellen teilen sich das Promise */
+let tfPromise = null;
+function ensureTF(){
+  if(window.tf) return Promise.resolve();
+  if(!tfPromise){
+    tfPromise = loadAny([
+      'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js',
+      'https://unpkg.com/@tensorflow/tfjs@4.20.0/dist/tf.min.js']);
+    tfPromise.catch(()=>{ tfPromise = null; });
+  }
+  return tfPromise;
+}
+function ensureDetector(){
+  if(kiPromise) return kiPromise;
+  kiPromise = (async ()=>{
+    await ensureTF();
+    if(!window.poseDetection) await loadAny([
+      'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js',
+      'https://unpkg.com/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js']);
+    const det = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      {modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER});
+    try{  /* Aufwärmen: kompiliert die Grafik-Shader schon jetzt */
+      const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+      await det.estimatePoses(c);
+    }catch(_){}
+    return det;
+  })();
+  kiPromise.catch(()=>{ kiPromise = null; });  /* Fehler -> nächster Versuch erlaubt */
+  return kiPromise;
+}
+function prewarmKI(){
+  if(navigator.connection && navigator.connection.saveData) return;  /* Datensparmodus respektieren */
+  ensureDetector().catch(()=>{});
+}
+/* Zwei-Pass-Erkennung: 1) grob im Gesamtbild, 2) präzise im Personen-Ausschnitt */
+async function kiKeypoints(det){
+  const inp = kiInput();
+  const p1 = await det.estimatePoses(inp.src);
+  const kp = {};
+  if(p1[0]) for(const k of p1[0].keypoints)
+    kp[k.name] = {x: k.x / inp.k, y: k.y / inp.k, score: k.score};
+
+  const good = Object.values(kp).filter(k => k.score >= 0.2);
+  if(good.length < 4) return kp;                     /* zu unsicher für Zuschnitt */
+  let x0 = Math.min(...good.map(k=>k.x)), x1 = Math.max(...good.map(k=>k.x));
+  let y0 = Math.min(...good.map(k=>k.y)), y1 = Math.max(...good.map(k=>k.y));
+  const mx = (x1-x0)*0.30 + 12, my = (y1-y0)*0.10 + 12;
+  x0 = Math.max(0, x0-mx); x1 = Math.min(iw, x1+mx);
+  y0 = Math.max(0, y0-my); y1 = Math.min(ih, y1+my);
+  const bw = x1-x0, bh = y1-y0;
+  if(bw < 40 || bh < 80) return kp;
+
+  const maxE = 640, k2 = Math.min(1, maxE / Math.max(bw, bh));
+  const cw = Math.round(bw*k2), ch = Math.round(bh*k2);
+  const oc = document.createElement('canvas'); oc.width = cw; oc.height = ch;
+  oc.getContext('2d').drawImage(img, x0, y0, bw, bh, 0, 0, cw, ch);
+  const p2 = await det.estimatePoses(oc);
+  if(p2[0]) for(const k of p2[0].keypoints){
+    if(k.score >= 0.25) kp[k.name] = {x: x0 + k.x/k2, y: y0 + k.y/k2, score: k.score};
+  }
+  return kp;
+}
+
+/* Eingabebild fürs Modell verkleinern: spart auf 12-MP-Fotos Sekunden */
+function kiInput(){
+  const maxE = 512;
+  const k = Math.min(1, maxE / Math.max(iw, ih));
+  if(k >= 1) return {src: img, k: 1};
+  const w = Math.round(iw*k), h = Math.round(ih*k);
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+  oc.getContext('2d').drawImage(img, 0, 0, w, h);
+  return {src: oc, k};
+}
+
+async function runKI(){
+  if(!img || !nextTarget()) return;   /* ergänzt nur fehlende Punkte, überschreibt nie gesetzte */
+  const seqAt = loadSeq, cur = img;   /* Bildwechsel während der Wartezeiten erkennen */
+  const btn = $('btnKI');
+  btn.disabled = true;
+  try{
+    btn.textContent = 'KI-Modell lädt … (einmalig ~7 MB)';
+    const det = await ensureDetector();
+    if(loadSeq !== seqAt || img !== cur) return;
+    btn.textContent = 'Analysiere Foto …';
+    busyShow('Punkte werden gesetzt …');
+    const kp = await kiKeypoints(det);
+    if(loadSeq !== seqAt || img !== cur) return;
+    measureTilt(kp);
+    const MIN = 0.2;
+    const get = n => (kp[n] && kp[n].score >= MIN) ? {x: kp[n].x, y: kp[n].y} : null;
+    const best = (a, b)=>{
+      const A = kp[a], B = kp[b];
+      const c = (A && B) ? (A.score >= B.score ? A : B) : (A || B);
+      return (c && c.score >= MIN) ? {x: c.x, y: c.y} : null;
+    };
+    /* grobe Anker für die Setz-Hilfe (auch unsichere Treffer) */
+    kiHints = {};
+    const gh = n => (kp[n] && kp[n].score >= 0.1) ? {x: kp[n].x, y: kp[n].y} : null;
+    const bh = (a, b)=>{ const A = gh(a), B = gh(b);
+      return A && B ? (kp[a].score >= kp[b].score ? A : B) : (A || B); };
+    if(VIEWS[view].family === 'side'){
+      kiHints.tragus = bh('left_ear','right_ear');
+      kiHints.acromion = bh('left_shoulder','right_shoulder');
+      kiHints.trochanter = bh('left_hip','right_hip');
+      kiHints.knee = bh('left_knee','right_knee');
+      kiHints.malleolus = bh('left_ankle','right_ankle');
+    } else {
+      const hp = (nl, nr, idL, idR)=>{
+        const A = gh(nl), B = gh(nr);
+        if(!A || !B) return;
+        kiHints[idL] = A.x <= B.x ? A : B;
+        kiHints[idR] = A.x <= B.x ? B : A;
+      };
+      const hk = VIEWS[view].headKp === 'ear' ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
+      hp(hk[0], hk[1], 'headL', 'headR');
+      hp('left_shoulder','right_shoulder','shL','shR');
+      hp('left_hip','right_hip','hipL','hipR');
+      hp('left_ankle','right_ankle','ankL','ankR');
+    }
+    for(const k2 in kiHints) if(!kiHints[k2]) delete kiHints[k2];
+
+    const put = (id, p)=>{ if(p && !pts[id]){
+      pts[id] = {x: Math.min(iw, Math.max(0, p.x)), y: Math.min(ih, Math.max(0, p.y))};
+      placeOrder.push(id); return true; } return false; };
+    let set = 0; const est = [];
+
+    if(VIEWS[view].family === 'side'){
+      const ear = best('left_ear','right_ear'), sh = best('left_shoulder','right_shoulder'),
+            hip = best('left_hip','right_hip'), kn = best('left_knee','right_knee'),
+            an  = best('left_ankle','right_ankle');
+      if(put('tragus', ear)) set++;
+      if(put('acromion', sh)) set++;
+      if(put('trochanter', hip)) set++;
+      if(put('knee', kn)) set++;
+      if(put('malleolus', an)) set++;
+    } else {
+      const pair = (nl, nr, idL, idR, lift)=>{
+        const A = get(nl), B = get(nr);
+        if(!A || !B) return null;
+        const L = A.x <= B.x ? A : B, R = A.x <= B.x ? B : A;
+        if(put(idL, {x: L.x, y: L.y - (lift||0)})) set++;
+        if(put(idR, {x: R.x, y: R.y - (lift||0)})) set++;
+        return {L, R};
+      };
+      const headPair = VIEWS[view].headKp === 'ear'
+        ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
+      const hd = pair(headPair[0], headPair[1], 'headL', 'headR', 0);
+      const sh = pair('left_shoulder','right_shoulder','shL','shR', 0);
+      if(!hd && VIEWS[view].headKp === 'ear' && sh){
+        /* Ohren sind von hinten oft unsicher: Ohrhöhe aus der Schulterbreite schätzen */
+        const mx2 = (sh.L.x + sh.R.x)/2, my2 = (sh.L.y + sh.R.y)/2;
+        const w2 = Math.max(24, sh.R.x - sh.L.x);
+        const hy = my2 - w2*0.52;
+        if(hy >= 0){                    /* Kopf abgeschnitten -> keine Phantompunkte */
+          let hSet = 0;
+          if(put('headL', {x: mx2 - w2*0.16, y: hy})) hSet++;
+          if(put('headR', {x: mx2 + w2*0.16, y: hy})) hSet++;
+          if(hSet){ set += hSet; est.push('Ohrlinie'); }
+        }
+      }
+      const hipL = get('left_hip'), hipR = get('right_hip');
+      if(sh && hipL && hipR){
+        const bodyScale = Math.abs(((hipL.y + hipR.y)/2) - ((sh.L.y + sh.R.y)/2));
+        const s0 = set;
+        pair('left_hip','right_hip','hipL','hipR', bodyScale * 0.20);
+        if(set > s0) est.push('Beckenkamm');   /* nur melden, wenn wirklich geschätzt-gesetzt */
+      }
+      pair('left_ankle','right_ankle','ankL','ankR', 0);
+    }
+
+    if(!set){
+      /* nur melden, wenn wirklich noch Punkte fehlen – sonst hat der Nutzer
+         sie während der Ladezeit selbst gesetzt */
+      if(nextTarget()) kiMsgShow('KI: keine Person sicher erkannt – bitte Punkte manuell setzen.');
+    } else {
+      state = nextTarget() ? 'placing' : 'done';
+      kiMsgShow(`KI hat ${set} Punkt${set === 1 ? '' : 'e'} vorgeschlagen`
+        + (est.length ? ` (geschätzt: ${est.join(', ')})` : '')
+        + ' – bitte jeden Punkt prüfen und bei Bedarf ziehen.'
+        + (nextTarget() ? ' Fehlende Punkte manuell tippen.' : ''));
+    }
+    render(); updateGuide(); updateMetrics();
+  }catch(err){
+    kiMsgShow('KI momentan nicht verfügbar – Internetverbindung prüfen (Firmennetze/Firewalls blockieren '
+      + 'teils die Modell-Server). „✨ Punkte per KI vorschlagen“ erneut versuchen oder Punkte manuell setzen.');
+  }finally{
+    busyHide();
+    btn.disabled = false;
+    btn.textContent = '✨ Punkte per KI vorschlagen';
+  }
+}
+$('btnKI').addEventListener('click', runKI);
+
+/* ============================================================
+   Untersuchung: 4 Ansichten geführt (vorne -> rechts -> hinten -> links)
+   ============================================================ */
+let previewIds = [];
+
+let singleOpen = false, examLen = 4;
+document.querySelectorAll('#examLenSeg button').forEach(b => {
+  b.addEventListener('click', ()=>{
+    examLen = parseInt(b.dataset.len, 10);
+    document.querySelectorAll('#examLenSeg button').forEach(x =>
+      x.classList.toggle('active', x === b));
+  });
+});
+function updateExamUI(){
+  const on = !!exam;
+  $('btnExam').hidden = on;
+  $('examLenRow').hidden = on;
+  $('examRow').hidden = !on;
+  $('btnSingle').hidden = on || singleOpen;
+  $('photoRow').hidden = !(on || singleOpen);
+  if(on) $('btnExamNext').disabled = !(img && state === 'done');
+  if(on && !img){
+    $('emptyTitle').textContent = `Ansicht ${exam.idx+1} von ${exam.len} · ${VIEWS[EXAM_ORDER[exam.idx]].label}`;
+    $('emptySub').textContent = 'Foto aufnehmen oder auswählen – die KI setzt die Punkte vor, du korrigierst nur.';
+  } else if(!on){
+    $('emptyTitle').textContent = 'Neue Analyse';
+    $('emptySub').textContent = 'Der geführte Ablauf nimmt alle 4 Ansichten nacheinander auf – Vorne, Rechts, Hinten, Links.';
+  }
+}
+$('btnSingle').addEventListener('click', ()=>{
+  singleOpen = true; updateExamUI();
+});
+
+function resetToEmpty(){
+  singleOpen = false; kiHints = {};
+  img = null; pts = {}; placeOrder = []; state = 'empty';
+  z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; kiMsgHide(); updateZoomChip(); tiltReset();
+  wrap.style.display = 'none';
+  $('guideBar').style.display = 'none';
+  $('resultsCard').style.display = 'none';
+  $('emptyState').style.display = 'block';
+}
+
+$('btnExam').addEventListener('click', ()=>{
+  exam = {idx: 0, ids: {}, len: examLen};
+  editingId = null;
+  $('previewCard').style.display = 'none';
+  resetToEmpty();
+  setView(EXAM_ORDER[0], true);
+  updateExamUI(); updateGuide(); updateMetrics();
+});
+
+function examAdvance(save){
+  if(save){
+    if(!(img && state === 'done')) return;
+    const s = snapshotSession();
+    const i = sessions.findIndex(x => x.id === s.id);
+    if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
+    else sessions.push(s);
+    exam.ids[view] = s.id;
+    editingId = null;
+    renderSessions();
+  }
+  exam.idx++;
+  if(exam.idx >= exam.len){
+    const ids = EXAM_ORDER.slice(0, exam.len).map(v => exam.ids[v]).filter(Boolean);
+    exam = null;
+    resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
+    if(ids.length) buildPreview(ids);
+    else alert('Keine Ansichten gespeichert.');
+    return;
+  }
+  resetToEmpty();
+  setView(EXAM_ORDER[exam.idx], true);
+  updateExamUI(); updateGuide(); updateMetrics();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+$('btnExamNext').addEventListener('click', ()=> examAdvance(true));
+$('btnExamSkip').addEventListener('click', ()=> examAdvance(false));
+$('btnExamStop').addEventListener('click', ()=>{
+  if(!confirm('Untersuchung beenden? Bereits gespeicherte Ansichten bleiben im Verlauf.')) return;
+  exam = null;
+  resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
+});
+
+async function buildPreview(ids){
+  previewIds = ids;
+  const box = $('prevSlides');
+  box.innerHTML = '';
+  const sel = ids.map(id => sessions.find(x => x.id === id)).filter(Boolean);
+  $('prevTitle').textContent = `Untersuchung · ${fmtDate(sel[0] ? sel[0].dateStr : todayISO())} · ${sel.length} Ansicht${sel.length===1?'':'en'}`;
+  for(const s of sel){
+    const div = document.createElement('div'); div.className = 'slide';
+    const cv = document.createElement('canvas'); div.appendChild(cv);
+    const cap = document.createElement('div'); cap.className = 'cap mono';
+    cap.textContent = VIEWS[s.view].label; div.appendChild(cap);
+    box.appendChild(div);
+  }
+  $('previewCard').style.display = 'block';
+  const cssW = box.clientWidth || 340;
+  const dpr = window.devicePixelRatio || 1;
+  await Promise.all(sel.map(async (s, i)=>{
+    const im = await ensureImg(s);
+    const cv = box.children[i].querySelector('canvas');
+    const cssH = Math.round(cssW * s.ih / s.iw);
+    cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
+    cv.style.height = cssH + 'px';
+    const c2 = cv.getContext('2d');
+    c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+  }));
+  $('previewCard').scrollIntoView({behavior:'smooth', block:'start'});
+}
+$('btnPrevClose').addEventListener('click', ()=>{ $('previewCard').style.display = 'none'; });
+$('btnExamSave').addEventListener('click', ()=>{
+  const sel = previewIds.map(id => sessions.find(x => x.id === id)).filter(Boolean);
+  if(!sel.length) return;
+  exportSessions(sel, `lotlinie_daten_${safeName(sel[0].patient)}_${sel[0].dateStr}.json`);
+});
+
+async function shareOrDownloadBlob(blob, name, mime){
+  try{
+    const file = new File([blob], name, {type: mime});
+    if(navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      await navigator.share({files:[file], title: name});
+      return;
+    }
+  }catch(e){ if(e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- PDF mit Kurzauswertung, teilbar ---------- */
+let pdfLibPromise = null;
+function ensurePDFLib(){
+  if(window.jspdf) return Promise.resolve();
+  if(!pdfLibPromise){
+    pdfLibPromise = loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      .catch(e => { pdfLibPromise = null; throw e; });
+  }
+  return pdfLibPromise;
+}
+function shortEval(s){
+  const ms = computeMetricsFor(s.view, s.pts, s.plumbTilt || 0).filter(m => m.available);
+  if(!ms.length) return VIEWS[s.view].label + ': keine Messwerte.';
+  const bad = ms.filter(m => m.st !== 'ok');
+  if(!bad.length) return VIEWS[s.view].label + ': unauffällig.';
+  return VIEWS[s.view].label + ': '
+    + bad.map(m => `${m.name.split(' ·')[0]} ${m.txt} – ${m.sub}`).join('; ') + '.';
+}
+
+$('btnExamPDF').addEventListener('click', async ()=>{
+  const btn = $('btnExamPDF');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try{
+    btn.textContent = 'PDF wird erstellt …';
+    await ensurePDFLib();
+    const sel = previewIds.map(id => sessions.find(x => x.id === id)).filter(Boolean);
+    if(!sel.length) return;
+    const {jsPDF} = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    const W = 210, M = 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('LOT | LINIE  ·  HALTUNGSANALYSE', M, 18);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70);
+    const pat = sel[0].patient || '—';
+    doc.text(`Patient·in: ${pat}     Datum: ${fmtDate(sel[0].dateStr)}     Erstellt: ${fmtDate(todayISO())}, ${nowTime()} Uhr`, M, 24);
+    doc.setTextColor(0);
+
+    const imgTop = 30, maxH = 92;
+    const items = [];
+    for(const s of sel){
+      const im = await ensureImg(s);
+      const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
+      const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: VIEWS[s.view].label});
+    }
+    pdfImageRow(doc, items, imgTop, maxH, M, W);
+
+    let y = imgTop + maxH + 19;
+    doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Kurzauswertung', M, y); y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+    for(const s of sel){
+      const lines = doc.splitTextToSize('•  ' + shortEval(s), W - 2*M);
+      doc.text(lines, M, y);
+      y += lines.length * 4.6 + 1.5;
+    }
+    y += 3;
+    const anyBad = sel.some(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0).some(m => m.available && m.st !== 'ok'));
+    doc.setFont('helvetica','bold');
+    doc.text(anyBad
+      ? 'Gesamteindruck: einzelne auffällige Werte (siehe oben) – Verlauf beobachten.'
+      : 'Gesamteindruck: insgesamt unauffällig.', M, y);
+
+    doc.setDrawColor(60); doc.line(M, 270, M + 60, 270);
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(60);
+    doc.text('Datum, Unterschrift', M, 274);
+    doc.setFontSize(7.5); doc.setTextColor(110);
+    doc.text(doc.splitTextToSize('Interne Dokumentationshilfe. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung oder Diagnostik. Seitenangaben aus Bildsicht. Grün = Soll (Lot), Rot = Ist. Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+
+    const name = `${safeName(pat) || 'Patient'}_Untersuchung_${sel[0].dateStr}.pdf`;
+    await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
+  }catch(err){
+    alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
+  }finally{
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+/* Verlaufs-PDF: gleiche Ansicht, mehrere Daten – Bilder freigestellt, Werte tabellarisch */
+$('btnCmpPDF').addEventListener('click', async ()=>{
+  if(cmpSel.length < 2) return;
+  const btn = $('btnCmpPDF');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  try{
+    await ensurePDFLib();
+    const sel = cmpSel, v = sel[0].view;
+    let done = 0;
+    for(const s of sel){
+      btn.textContent = `Bilder freistellen ${++done}/${sel.length} …`;
+      await ensureCutout(s);
+    }
+    btn.textContent = 'PDF wird erstellt …';
+    const {jsPDF} = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    const W = 210, M = 14;
+    doc.setFont('helvetica','bold'); doc.setFontSize(13);
+    doc.text('LOT | LINIE  ·  VERLAUFSVERGLEICH', M, 16);
+    doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(70);
+    const pat = [...new Set(sel.map(s => s.patient || ''))].filter(Boolean).join(', ') || 'Patient';
+    doc.text(`Patient·in: ${pat}     Ansicht: ${VIEWS[v].label}     Zeitraum: ${fmtDate(sel[0].dateStr)} – ${fmtDate(sel[sel.length-1].dateStr)}`, M, 22);
+    doc.setTextColor(0);
+
+    const imgTop = 27, maxH = 108;
+    const items = [];
+    for(const s of sel){
+      const im = await ensureCutout(s);
+      const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
+      const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
+    }
+    pdfImageRow(doc, items, imgTop, maxH, M, W);
+
+    let y = imgTop + maxH + 18;
+    const per = sel.map(s => computeMetricsFor(s.view, s.pts, s.plumbTilt || 0));
+    const n = sel.length;
+    const valW = Math.min(30, Math.round((182 - 56 - 52) / n));
+    const widths = [56, ...Array(n).fill(valW), 182 - 56 - valW*n];
+    const header = ['Messwert', ...sel.map(s => fmtDate(s.dateStr)), 'Veränderung'];
+    const rows = [];
+    per[0].forEach((m0, mi)=>{
+      const first = per[0][mi], last = per[n-1][mi];
+      const vals = per.map(pm => pm[mi].available ? pm[mi].txt : '–');
+      const delta = (first.available && last.available)
+        ? (d => `${d.txt} · ${d.word}`)(deltaInfo(m0.cmp, first.val, last.val)) : '–';
+      rows.push([m0.name, ...vals, delta]);
+    });
+    y = pdfTable(doc, M, y, widths, header, rows);
+
+    doc.setDrawColor(60); doc.line(M, 268, M + 60, 268);
+    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, 272);
+    doc.setFontSize(7.5); doc.setTextColor(110);
+    doc.text(doc.splitTextToSize('Veränderung: älteste zu neuester Aufnahme; Vergleichbarkeit setzt ähnliche Aufnahmeposition voraus. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung. ' + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '') + 'Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+
+    const name = `${safeName(pat)}_Verlauf_${safeName(VIEWS[v].label)}.pdf`;
+    await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
+  }catch(err){
+    alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
+  }finally{
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+/* ============================================================
+   Schieflage-Erkennung: steht das Foto gerade? Die senkrechte
+   Soll-Linie stimmt nur, wenn die Kamera nicht verkippt war.
+   Aus der Rumpfachse (Schulter-Mitte -> Hüft-Mitte) wird der
+   Kippwinkel geschätzt – nur bei Frontal/Hinten verlässlich.
+   ============================================================ */
+function measureTilt(kp){
+  tiltReset();
+  if(VIEWS[view].family !== 'pairs') return;   // seitlich: Vorneigung ist normal
+  const g = n => (kp[n] && kp[n].score >= 0.3) ? {x:kp[n].x, y:kp[n].y} : null;
+  const sL=g('left_shoulder'), sR=g('right_shoulder'), hL=g('left_hip'), hR=g('right_hip');
+  if(!sL || !sR || !hL || !hR) return;
+  const sh  = {x:(sL.x+sR.x)/2, y:(sL.y+sR.y)/2};
+  const hip = {x:(hL.x+hR.x)/2, y:(hL.y+hR.y)/2};
+  const trunk = Math.hypot(sh.x-hip.x, sh.y-hip.y);
+  if(trunk < 30) return;
+  tiltDeg = deg(Math.atan2(sh.x - hip.x, hip.y - sh.y));   // gegen Bild-Senkrechte
+  if(Math.abs(tiltDeg) >= 3){
+    const dir = tiltDeg > 0 ? 'im Uhrzeigersinn' : 'gegen den Uhrzeigersinn';
+    $('tiltMsg').textContent = `Foto wirkt ${Math.abs(tiltDeg).toFixed(1).replace('.', ',')}° verkippt (${dir}). `
+      + 'Die senkrechte Soll-Linie stimmt dann nicht ganz.';
+    $('tiltWarn').hidden = false;
+  }
+}
+function tiltReset(){ tiltDeg = 0; tiltHandled = false; const t = $('tiltWarn'); if(t) t.hidden = true; }
+
+/* Bild um -tiltDeg um seine Mitte drehen und neu einpassen; Punkte mitrotieren */
+function straightenImage(){
+  if(!img || Math.abs(tiltDeg) < 0.1) return;
+  const rad = -tiltDeg * Math.PI / 180;
+  const cx = iw/2, cy = ih/2;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  /* neue Leinwand, groß genug fürs rotierte Bild */
+  const nw = Math.abs(iw*cos) + Math.abs(ih*sin);
+  const nh = Math.abs(iw*sin) + Math.abs(ih*cos);
+  const oc = document.createElement('canvas');
+  oc.width = Math.round(nw); oc.height = Math.round(nh);
+  const c = oc.getContext('2d');
+  c.translate(nw/2, nh/2); c.rotate(rad); c.drawImage(img, -cx, -cy);
+  /* Punkte in dieselbe Zielgeometrie überführen */
+  const map = p => {
+    const dx = p.x - cx, dy = p.y - cy;
+    return {x: nw/2 + dx*cos - dy*sin, y: nh/2 + dx*sin + dy*cos};
+  };
+  const np = {}; for(const id in pts) np[id] = map(pts[id]);
+  const im2 = new Image();
+  im2.onload = ()=>{
+    img = im2; iw = im2.naturalWidth; ih = im2.naturalHeight; pts = np;
+    z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0; tiltReset(); bgReset(); updateZoomChip();
+    render(); updateMetrics(); updateGuide();
+  };
+  im2.src = oc.toDataURL('image/jpeg', 0.92);
+}
+window.__setTilt = (d)=>{ tiltDeg = d; $('tiltMsg').textContent = 'Testmodus'; $('tiltWarn').hidden = false; };
+$('btnStraighten').addEventListener('click', straightenImage);
+$('btnTiltIgnore').addEventListener('click', ()=>{ tiltHandled = true; $('tiltWarn').hidden = true; });
+$('btnTiltPlumb').addEventListener('click', ()=>{
+  plumbTilt = Math.max(-20, Math.min(20, tiltDeg));
+  tiltHandled = true; $('tiltWarn').hidden = true;
+  render(); updateMetrics();
+});
+
+/* Vergleichstabelle im PDF */
+function pdfTable(doc, x, y, widths, header, rows){
+  const TW = widths.reduce((a,b)=> a+b, 0), rh = 7;
+  const wordColor = w => w === 'verbessert' ? [21,122,85]
+    : w === 'verschlechtert' ? [198,60,40]
+    : [105,112,110];
+  doc.setFontSize(9);
+  const fit = (t, w)=>{
+    let s2 = String(t);
+    if(doc.getTextWidth(s2) <= w - 4) return s2;
+    while(s2.length > 1 && doc.getTextWidth(s2 + '…') > w - 4) s2 = s2.slice(0, -1);
+    return s2 + '…';
+  };
+  doc.setFillColor(238,242,241); doc.setDrawColor(178,188,186);
+  doc.rect(x, y, TW, rh, 'FD');
+  doc.setFont('helvetica','bold'); doc.setTextColor(25,35,33);
+  let cx = x;
+  header.forEach((h, i)=>{ doc.text(fit(h, widths[i]), cx + 2.2, y + 4.8); cx += widths[i]; });
+  y += rh;
+  doc.setFont('helvetica','normal');
+  for(const r of rows){
+    doc.setFontSize(9);
+    doc.setDrawColor(208,216,214);
+    doc.rect(x, y, TW, rh);
+    cx = x;
+    r.forEach((c, i)=>{
+      if(i === r.length - 1){
+        const w = String(c).split('·').pop().trim();
+        doc.setTextColor(...wordColor(w));
+      } else doc.setTextColor(20,24,23);
+      doc.text(fit(c, widths[i]), cx + 2.2, y + 4.8);
+      cx += widths[i];
+    });
+    y += rh;
+  }
+  doc.setDrawColor(208,216,214);
+  cx = x;
+  for(let i = 0; i < widths.length - 1; i++){
+    cx += widths[i];
+    doc.line(cx, y - rh*(rows.length+1), cx, y);
+  }
+  doc.setTextColor(0);
+  return y;
+}
+
+/* Bildreihe im PDF: Bilder direkt aneinander, als Gruppe zentriert */
+function pdfImageRow(doc, items, yTop, maxH, M, W, gap = 3){
+  const usable = W - 2*M;
+  let hUse = maxH;
+  let ws = items.map(it => maxH * it.ar);
+  let total = ws.reduce((a,b)=> a+b, 0) + gap*(items.length - 1);
+  if(total > usable){
+    const f = (usable - gap*(items.length - 1)) / (total - gap*(items.length - 1));
+    ws = ws.map(w => w*f); hUse = maxH * f; total = usable;
+  }
+  const hasLabels = items.some(i => i.label);
+  const imgY = yTop + (hasLabels ? 6 : 0);
+  let x = M + (usable - total)/2;
+  for(let i = 0; i < items.length; i++){
+    if(items[i].label){
+      doc.setFont('helvetica','bold'); doc.setFontSize(9.5); doc.setTextColor(35,45,43);
+      doc.text(items[i].label, x + ws[i]/2, yTop + 3, {align:'center'});
+      doc.setFont('helvetica','normal');
+    }
+    doc.addImage(items[i].data, 'JPEG', x, imgY + (maxH - hUse)/2, ws[i], hUse);
+    x += ws[i] + gap;
+  }
+  doc.setTextColor(0);
+}
+
+/* Untersuchungs-Vergleich: pro Ansicht eine Seite – Bilder freigestellt, Werte tabellarisch */
+async function buildExamComparePDF(sel, dates){
+  const btn = $('btnCompare');
+  const orig = btn ? btn.textContent : '';
+  if(btn) btn.disabled = true;
+  try{
+    await ensurePDFLib();
+    const {jsPDF} = window.jspdf;
+    const doc = new jsPDF({unit:'mm', format:'a4'});
+    const W = 210, M = 14;
+    const pick = (view, date) => {
+      const c = sel.filter(s => s.view === view && s.dateStr === date)
+                   .sort((a2,b2)=> b2.created - a2.created);
+      return c[0] || null;
+    };
+    const pat = [...new Set(sel.map(s => s.patient || ''))].filter(Boolean).join(', ') || 'Patient';
+    const pairs = EXAM_ORDER.map(v => ({v, a: pick(v, dates[0]), b: pick(v, dates[1])}))
+                            .filter(p => p.a && p.b);
+    if(!pairs.length){
+      alert('Keine Ansicht ist an beiden Terminen vorhanden – Vergleich nicht möglich.');
+      return;
+    }
+    let done = 0;
+    for(const p of pairs){
+      for(const s of [p.a, p.b]){
+        if(btn) btn.textContent = `Bilder freistellen ${++done}/${pairs.length*2} …`;
+        await ensureCutout(s);
+      }
+    }
+    if(btn) btn.textContent = 'PDF wird erstellt …';
+
+    let page = 0;
+    for(const {v, a: sa, b: sb} of pairs){
+      if(page++) doc.addPage();
+      doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(105);
+      doc.text(`LOT | LINIE · VERGLEICH     ${pat}     ${fmtDate(dates[0])}  »  ${fmtDate(dates[1])}     Seite ${page}/${pairs.length}`, M, 11);
+      doc.setTextColor(0); doc.setFont('helvetica','bold'); doc.setFontSize(14);
+      doc.text(VIEWS[v].label, M, 20);
+
+      const imgTop = 25, maxH = 120;
+      const items = [];
+      for(const s of [sa, sb]){
+        const im = await ensureCutout(s);
+        const rw = Math.min(650, s.iw), rh = Math.round(rw * s.ih / s.iw);
+        const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
+        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+        items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
+      }
+      doc.setFont('helvetica','normal');
+      pdfImageRow(doc, items, imgTop, maxH, M, W);
+
+      let y = imgTop + maxH + 18;
+      const ma = computeMetricsFor(v, sa.pts, sa.plumbTilt || 0);
+      const mb = computeMetricsFor(v, sb.pts, sb.plumbTilt || 0);
+      const rows = ma.map((m0, mi)=>{
+        const A = m0, B = mb[mi];
+        const delta = (A.available && B.available)
+          ? (d => `${d.txt} · ${d.word}`)(deltaInfo(m0.cmp, A.val, B.val)) : '–';
+        return [m0.name, A.available ? A.txt : '–', B.available ? B.txt : '–', delta];
+      });
+      if(rows.length){
+        pdfTable(doc, M, y, [62, 30, 30, 60],
+          ['Messwert', fmtDate(sa.dateStr), fmtDate(sb.dateStr), 'Veränderung'], rows);
+      }
+      doc.setFontSize(7.5); doc.setTextColor(110);
+      doc.text(doc.splitTextToSize('Veränderung vom ersten zum zweiten Termin. Richtwerte dienen der Orientierung und ersetzen keine klinische Beurteilung. ' + (VIEWS[v].family === 'pairs' ? 'Seitenangaben aus Bildsicht. ' : '') + 'Erstellt mit Lotlinie – alle Daten verbleiben auf dem Erfassungsgerät.', W - 2*M), M, 282);
+      doc.setTextColor(0);
+    }
+    doc.setDrawColor(60); doc.line(M, 266, M + 60, 266);
+    doc.setFontSize(8); doc.setTextColor(60); doc.text('Datum, Unterschrift', M, 270);
+
+    const name = `${safeName(pat)}_Vergleich_${dates[0]}_${dates[1]}.pdf`;
+    await shareOrDownloadBlob(doc.output('blob'), name, 'application/pdf');
+  }catch(err){
+    alert('PDF konnte nicht erstellt werden (Internetverbindung für die PDF-Bibliothek nötig).');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = orig; }
+  }
+}
+
+/* ============================================================
+   Hintergrund entfernen: Person freistellen (Beta). Nutzt ein
+   Segmentierungsmodell im Browser; das Original bleibt per
+   Knopfdruck wiederherstellbar.
+   ============================================================ */
+let segPromise = null, imgOriginal = null;
+function bgReset(){
+  imgOriginal = null; imgAlpha = false;
+  const b = $('btnBG');
+  if(b){ b.textContent = '🪄 Hintergrund entfernen'; b.disabled = false; }
+}
+/* Weiche Zwei-Pass-Freistellung: liefert Canvas mit transparenter Person oder null */
+async function buildSoftCutout(seg, source, cw, ch){
+  const softMask = async (srcCanvas) => {
+    const people = await seg.segmentPeople(srcCanvas);
+    if(!people || !people.length) return null;
+    const md = await people[0].mask.toImageData();
+    const a = md.data;
+    for(let i = 0; i < a.length; i += 4){
+      const pr = a[i];
+      a[i] = 255; a[i+1] = 255; a[i+2] = 255;
+      a[i+3] = pr <= 40 ? 0 : pr >= 170 ? 255 : Math.round((pr - 40) * 255 / 130);
+    }
+    const cv = document.createElement('canvas');
+    cv.width = srcCanvas.width; cv.height = srcCanvas.height;
+    cv.getContext('2d').putImageData(md, 0, 0);
+    return cv;
+  };
+  const e1 = 512, k1 = Math.min(1, e1 / Math.max(cw, ch));
+  const s1 = document.createElement('canvas');
+  s1.width = Math.round(cw*k1); s1.height = Math.round(ch*k1);
+  s1.getContext('2d').drawImage(source, 0, 0, s1.width, s1.height);
+  const m1 = await softMask(s1);
+  if(!m1) return null;
+  const d1 = m1.getContext('2d').getImageData(0, 0, m1.width, m1.height).data;
+  let x0 = m1.width, x1 = 0, y0 = m1.height, y1 = 0, found = false;
+  for(let yy = 0; yy < m1.height; yy++)
+    for(let xx = 0; xx < m1.width; xx++)
+      if(d1[(yy*m1.width + xx)*4 + 3] > 96){
+        found = true;
+        if(xx < x0) x0 = xx; if(xx > x1) x1 = xx;
+        if(yy < y0) y0 = yy; if(yy > y1) y1 = yy;
+      }
+  const maskFull = document.createElement('canvas');
+  maskFull.width = cw; maskFull.height = ch;
+  const mfx = maskFull.getContext('2d');
+  mfx.imageSmoothingEnabled = true; mfx.imageSmoothingQuality = 'high';
+  if(found && (x1-x0) > 8 && (y1-y0) > 16){
+    const mx = (x1-x0)*0.06 + 3, my = (y1-y0)*0.04 + 3;
+    const bx = Math.max(0, (x0-mx)/k1), by = Math.max(0, (y0-my)/k1);
+    const bw = Math.min(cw, (x1+mx)/k1) - bx, bh = Math.min(ch, (y1+my)/k1) - by;
+    const e2 = 768, k2 = Math.min(1, e2 / Math.max(bw, bh));
+    const s2 = document.createElement('canvas');
+    s2.width = Math.round(bw*k2); s2.height = Math.round(bh*k2);
+    s2.getContext('2d').drawImage(source, bx, by, bw, bh, 0, 0, s2.width, s2.height);
+    const m2 = await softMask(s2);
+    if(m2) mfx.drawImage(m2, bx, by, bw, bh);
+    else mfx.drawImage(m1, 0, 0, cw, ch);
+  } else {
+    mfx.drawImage(m1, 0, 0, cw, ch);
+  }
+  const pc = document.createElement('canvas'); pc.width = cw; pc.height = ch;
+  const pctx = pc.getContext('2d');
+  pctx.drawImage(source, 0, 0);
+  pctx.globalCompositeOperation = 'destination-in';
+  pctx.filter = 'blur(1.5px)';
+  pctx.drawImage(maskFull, 0, 0);
+  pctx.filter = 'none';
+  return pc;
+}
+
+/* Für PDFs: Sitzungsbild freigestellt liefern (mit Cache, Original als Fallback) */
+const cutCache = {};
+async function ensureCutout(s){
+  if(cutCache[s.id]) return cutCache[s.id];
+  const im = await ensureImg(s);
+  if(s.alpha){ cutCache[s.id] = im; return im; }
+  try{
+    const seg = await ensureSegmenter();
+    const c = await buildSoftCutout(seg, im, s.iw, s.ih);
+    cutCache[s.id] = c || im;
+  }catch(e){
+    cutCache[s.id] = im;
+  }
+  return cutCache[s.id];
+}
+
+function ensureSegmenter(){
+  if(segPromise) return segPromise;
+  segPromise = (async ()=>{
+    await ensureTF();
+    if(!window.bodySegmentation) await loadAny([
+      'https://cdn.jsdelivr.net/npm/@tensorflow-models/body-segmentation@1.0.2/dist/body-segmentation.min.js',
+      'https://unpkg.com/@tensorflow-models/body-segmentation@1.0.2/dist/body-segmentation.min.js']);
+    return await bodySegmentation.createSegmenter(
+      bodySegmentation.SupportedModels.MediaPipeSelfieSegmentation,
+      {runtime: 'tfjs', modelType: 'general'});
+  })();
+  segPromise.catch(()=>{ segPromise = null; });
+  return segPromise;
+}
+async function removeBackgroundCore(silent){
+  if(!img || imgOriginal) return false;              /* schon freigestellt */
+  const cur = img, seqAt = loadSeq, cw = iw, ch = ih;
+  const btn = $('btnBG');
+  btn.disabled = true;
+  try{
+    btn.textContent = silent ? 'Hintergrund wird entfernt …' : 'Modell lädt …';
+    const seg = await ensureSegmenter();
+    if(img !== cur || loadSeq !== seqAt) return false;
+    btn.textContent = 'Person wird freigestellt …';
+    busyShow('Hintergrund wird entfernt …');
+    const pc = await buildSoftCutout(seg, cur, cw, ch);
+    if(img !== cur || loadSeq !== seqAt) return false;
+    if(!pc) throw new Error('keine Person');
+    const im2 = new Image();
+    await new Promise((res, rej)=>{ im2.onload = res; im2.onerror = rej; im2.src = pc.toDataURL('image/png'); });
+    if(img !== cur || loadSeq !== seqAt) return false;
+    imgOriginal = cur; img = im2; imgAlpha = true;
+    btn.textContent = '↩ Hintergrund wiederherstellen';
+    render();
+    if(!silent) kiMsgShow('Hintergrund entfernt (transparent) – Ränder kurz prüfen. Gleicher Knopf stellt das Original wieder her.');
+    return true;
+  }catch(err){
+    if(!silent) kiMsgShow('Keine Person sicher erkannt oder Modell nicht verfügbar – Hintergrund bleibt unverändert.');
+    return false;
+  }finally{
+    busyHide();
+    btn.disabled = false;
+    if(!imgOriginal) btn.textContent = '🪄 Hintergrund entfernen';
+  }
+}
+
+$('btnBG').addEventListener('click', async ()=>{
+  const btn = $('btnBG');
+  if(imgOriginal){                       /* Original zurück */
+    img = imgOriginal; imgOriginal = null; imgAlpha = false;
+    btn.textContent = '🪄 Hintergrund entfernen';
+    render();
+    kiMsgShow('Original-Hintergrund wiederhergestellt.');
+    return;
+  }
+  removeBackgroundCore(false);
+});
+
+/* Auto-Pipeline beim Foto-Laden: erst KI-Punkte (auf dem Originalfoto
+   erkennt die Pose-KI am zuverlässigsten), dann freistellen */
+async function autoPrep(){
+  const seqAt = loadSeq;
+  try{ await runKI(); }catch(_){}
+  if(loadSeq !== seqAt) return;          /* inzwischen neues Foto geladen */
+  try{ await removeBackgroundCore(true); }catch(_){}
+}
+
+/* Debug-Schnittstelle für automatisierte Tests */
+window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt, imgAlpha,
+  placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
+
+/* Modelle beim Start vorladen: erstes Foto fühlt sich sofort schnell an */
+if(AUTO_KI){
+  setTimeout(()=>{
+    if(navigator.connection && navigator.connection.saveData) return;
+    ensureDetector().catch(()=>{});
+    ensureSegmenter().catch(()=>{});
+  }, 600);
+}
+
+/* ---------- Sonstiges ---------- */
+window.addEventListener('resize', ()=>{ if(img) render(); });
+renderSessions();
+</script>
+</body>
+</html>
