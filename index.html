@@ -176,6 +176,20 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
   @page{margin:13mm}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- Vollbild-Lupe (Vergleich/Vorschau) ---------- */
+#lightbox{position:fixed;inset:0;z-index:60;background:rgba(8,14,18,.94);
+  display:flex;align-items:center;justify-content:center;touch-action:none}
+#lbCanvas{display:block;touch-action:none}
+#lbClose{position:absolute;top:calc(env(safe-area-inset-top,0px) + 12px);right:12px;width:44px;height:44px;
+  border-radius:50%;border:0;background:rgba(255,255,255,.92);color:#152430;font-size:18px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+#lbHint{position:absolute;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);left:0;right:0;text-align:center;
+  color:rgba(255,255,255,.85);font-size:12px;pointer-events:none}
+.cmpitem canvas,.slide canvas{cursor:zoom-in}
+.cmpitem,.slide{position:relative}
+.zoomhint{position:absolute;top:6px;right:6px;background:rgba(21,36,48,.72);color:#fff;
+  font-size:14px;line-height:1;padding:5px 6px;border-radius:8px;pointer-events:none}
 </style>
 </head>
 <body>
@@ -239,7 +253,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
   </div>
 
   <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
-  <input type="file" id="fileGal" accept="image/*" hidden>
+  <input type="file" id="fileGal" accept="image/*" multiple hidden>
   <input type="file" id="fileImport" accept=".json,application/json" multiple hidden>
 
   <!-- Canvas -->
@@ -271,8 +285,8 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
       <button class="btn small" id="btnQuickSave">✓ Aufnahme in Verlauf sichern</button>
     </div>
     <div class="row" id="examRow" hidden>
-      <button class="btn small" id="btnExamNext" disabled>Speichern & weiter →</button>
-      <button class="btn ghost small" id="btnExamSkip">Überspringen</button>
+      <button class="btn small" id="btnExamDone">✓ Fertig &amp; speichern</button>
+      <button class="btn ghost small" id="btnExamNext">Weiter →</button>
       <button class="btn ghost small" id="btnExamStop">Beenden</button>
     </div>
     <div class="row">
@@ -281,6 +295,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
       <button class="btn ghost small" id="btnUndo">↶ Punkt zurück</button>
       <button class="btn ghost small" id="btnRestart">Punkte neu setzen</button>
       <button class="btn ghost small" id="btnReplace">Foto ersetzen</button>
+      <button class="btn ghost small" id="btnPhotoDel" hidden>🗑 Foto entfernen</button>
     </div>
   </div>
 
@@ -335,8 +350,15 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 4.3 · Stand 20.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 4.4 · Stand 21.07.2026</div>
 </main>
+</div>
+
+<!-- Vollbild-Lupe für Vergleich/Vorschau -->
+<div id="lightbox" hidden>
+  <canvas id="lbCanvas"></canvas>
+  <button id="lbClose" aria-label="Schließen">✕</button>
+  <div id="lbHint" class="mono">Zwei Finger: zoomen · Doppeltipp: zurücksetzen</div>
 </div>
 
 <!-- Druckansicht -->
@@ -345,6 +367,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 <script>
 'use strict';
 const AUTO_KI = !/[?&]noki=1/.test(location.search);   /* ?noki=1 deaktiviert Auto-Vorschläge */
+const SHOULDER_OUT = 0.18;   /* KI-Schulterpunkte je Seite um diesen Anteil der Schulterbreite nach außen (Acromion) */
 /* ============================================================
    Lotlinie – Haltungsanalyse mit Verlaufsvergleich
    Landmarken per geführtem Fingertipp (mit Lupe), Winkel werden
@@ -378,6 +401,7 @@ const VIEWS = {
 };
 const LEGACY_VIEW = {lateral:'sideR', frontal:'front'};
 const EXAM_ORDER = ['front','sideR','back','sideL'];
+const TAB_SHORT = {front:'Vorne', sideR:'Rechts', back:'Hinten', sideL:'Links'};
 
 /* ---------- Zustand ---------- */
 let view = 'front';
@@ -746,9 +770,28 @@ function guardUnsavedPhoto(){
 }
 $('btnCam').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileCam').click(); });
 $('btnGal').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileGal').click(); });
-$('fileCam').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
-$('fileGal').addEventListener('change', e => { loadFile(e.target.files[0]); e.target.value=''; });
+$('fileCam').addEventListener('change', e => {
+  if(exam) exam.camMode = true;      /* Kamera-Modus: „Weiter" öffnet danach direkt wieder die Kamera */
+  loadFile(e.target.files[0]); e.target.value='';
+});
+$('fileGal').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if(!files.length) return;
+  if(exam){
+    exam.camMode = false;
+    if(files.length > 1){ await distributeGallery(files); return; }
+  }
+  loadFile(files[0]);
+});
 $('btnReplace').addEventListener('click', ()=>{ guardUnsavedPhoto(); $('fileGal').click(); });
+$('btnPhotoDel').addEventListener('click', ()=>{
+  if(!img || !exam) return;
+  if(!confirm('Foto dieser Ansicht entfernen?')) return;
+  delete exam.buf[view];
+  clearEditorState();
+  showEditor(false);
+  updateExamTabs(); updateExamUI(); updateGuide(); updateMetrics();
+});
 
 function setView(v, silent){
   if(!VIEWS[v] || v === view) return;
@@ -778,7 +821,11 @@ function setView(v, silent){
 }
 document.querySelectorAll('#segRow button').forEach(b => {
   b.addEventListener('click', ()=>{
-    if(exam){ alert('Während einer Untersuchung wechselt die Ansicht automatisch.'); return; }
+    if(exam){
+      const v = b.dataset.view;
+      if(exam.views.includes(v)) switchExamView(v);   /* frei zwischen den gewählten Ansichten wechseln */
+      return;
+    }
     setView(b.dataset.view);
   });
 });
@@ -1001,6 +1048,7 @@ stage.addEventListener('pointerdown', e => {
       showLmHelp(lm().find(x => x.id === hit), moveOrig);
       showLoupe(); updateLoupe(pos); render();
     } else {
+      hideLmHelp();   /* Tippen ins Leere/Karierte schließt die Setz-Hilfe */
       const ax = plumbAnchorX(), ay = plumbAnchorY();
       const r2 = stage.getBoundingClientRect();
       const s2 = (r2.width / iw) * z;
@@ -1112,20 +1160,25 @@ function updateGuide(){
   $('guideDots').innerHTML = list.map(l=>`<i class="${pts[l.id] ? 'on':''}"></i>`).join('');
   const nt = nextTarget();
   if(state === 'placing' && nt){
-    const modus = exam ? `Untersuchung ${exam.idx+1}/${exam.len}` : 'Einzelaufnahme';
+    const modus = exam ? `Untersuchung · ${TAB_SHORT[view]}` : 'Einzelaufnahme';
     $('guideStep').textContent = `${modus} · Punkt ${placedCount()+1} von ${list.length} · ${VIEWS[view].label}`;
     showLmHelp(nt, kiHints[nt.id] || null);
     $('guideName').textContent = `Tippe auf: ${nt.name}`;
     $('guideHint').textContent = nt.hint + ' Finger gedrückt halten und mit der Lupe fein ausrichten, dann loslassen. Zwei Finger: zoomen.';
   } else if(state === 'done'){
     kiMsgHide();
-    const modus = exam ? `Untersuchung ${exam.idx+1}/${exam.len}` : 'Einzelaufnahme';
+    const modus = exam ? `Untersuchung · ${TAB_SHORT[view]}` : 'Einzelaufnahme';
     $('guideStep').textContent = `${modus} · ${VIEWS[view].label} · vollständig`;
     hideLmHelp();
     $('guideName').textContent = 'Fertig – Punkte prüfen';
     $('guideHint').textContent = exam
-      ? 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann „Speichern & weiter".'
+      ? 'Punkte ziehen zum Korrigieren. Oben über die Tabs frei zwischen den Ansichten wechseln · „Weiter →" nimmt (im Kamera-Modus) direkt das nächste Foto auf · am Ende „✓ Fertig & speichern".'
       : 'Punkte ziehen zum Korrigieren · Soll-Linie: unten ⇄ verschieben, oben ↻ kippen. Dann sichern.';
+  } else {
+    $('guideStep').textContent = exam ? `Untersuchung · ${TAB_SHORT[view]}` : '';
+    $('guideName').textContent = '';
+    $('guideHint').textContent = '';
+    hideLmHelp();
   }
   $('btnUndo').disabled = placeOrder.length === 0;
   $('btnKI').hidden = !(img && state === 'placing' && placedCount() === 0);
@@ -1289,6 +1342,7 @@ $('histList').addEventListener('click', e => {
     return;
   }
   if(act === 'export'){ exportSessions([s]); return; }
+  if(exam){ alert('Bitte zuerst die laufende Untersuchung abschließen („✓ Fertig & speichern") oder beenden.'); return; }
   loadSession(s);   // Tipp auf den Eintrag: in den Editor laden
 });
 
@@ -1344,8 +1398,8 @@ function exportSessions(list, nameOverride){
   const payload = JSON.stringify({app:'lotlinie', version:1, sessions:list});
   const one = list.length === 1 ? list[0] : null;
   const name = nameOverride || (one
-    ? `lotlinie_${safeName(one.patient)}_${one.dateStr}_${one.view}.json`
-    : `lotlinie_verlauf_${todayISO()}.json`);
+    ? `${safeName(one.patient)}_lotlinie_${one.dateStr}_${one.view}.json`
+    : `${safeName((list[0]||{}).patient)}_lotlinie_verlauf_${todayISO()}.json`);
   deliverFile(name, payload);
 }
 $('btnExportAll').addEventListener('click', ()=> exportSessions(sortedSessions()));
@@ -1417,6 +1471,7 @@ $('btnCompare').addEventListener('click', async ()=>{
   imgsEl.innerHTML = sel.map((s,i)=>`
     <div class="cmpitem">
       <canvas data-i="${i}"></canvas>
+      <div class="zoomhint">🔍</div>
       <div class="cmpcap mono">${fmtDate(s.dateStr)}</div>
     </div>`).join('');
   await Promise.all(sel.map(async (s, i)=>{
@@ -1464,6 +1519,93 @@ function buildCompareTable(sel, v, tableEl, forPrint){
 
 $('btnCmpClose').addEventListener('click', ()=>{
   $('compareCard').style.display = 'none'; cmpSel = [];
+});
+
+/* ---------- Vollbild-Lupe: Vergleichs-/Vorschaubild groß + Zwei-Finger-Zoom ---------- */
+let lbBitmap = null, lbBase = 1, lbZ = 1, lbTx = 0, lbTy = 0, lbTapT = 0;
+const lbCanvas = $('lbCanvas'), lbctx = lbCanvas.getContext('2d');
+const lbPtrs = new Map(); let lbGesture = null, lbPinch = null, lbLast = null;
+
+async function openLightbox(s){
+  if(!s) return;
+  const im = await ensureImg(s);
+  const sc = Math.min(1, 1600 / s.iw);
+  const bw = Math.max(1, Math.round(s.iw * sc)), bh = Math.max(1, Math.round(s.ih * sc));
+  const oc = document.createElement('canvas'); oc.width = bw; oc.height = bh;
+  paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, bw, bh, 1, 0, 0,
+    false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+  lbBitmap = oc;
+  $('lightbox').hidden = false;
+  lbFit(); lbDraw();
+}
+function lbFit(){
+  if(!lbBitmap) return;
+  const vw = window.innerWidth, vh = window.innerHeight, dpr = window.devicePixelRatio || 1;
+  lbBase = Math.min(vw / lbBitmap.width, vh / lbBitmap.height) * 0.98;
+  lbZ = 1; lbTx = 0; lbTy = 0;
+  lbCanvas.width = Math.round(vw * dpr); lbCanvas.height = Math.round(vh * dpr);
+  lbCanvas.style.width = vw + 'px'; lbCanvas.style.height = vh + 'px';
+  lbctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function lbClamp(){
+  const vw = window.innerWidth, vh = window.innerHeight, sc = lbBase * lbZ;
+  const w = lbBitmap.width * sc, h = lbBitmap.height * sc;
+  const mx = Math.max(0, (w - vw) / 2), my = Math.max(0, (h - vh) / 2);
+  lbTx = Math.max(-mx, Math.min(mx, lbTx)); lbTy = Math.max(-my, Math.min(my, lbTy));
+}
+function lbDraw(){
+  if(!lbBitmap) return;
+  const vw = window.innerWidth, vh = window.innerHeight, sc = lbBase * lbZ;
+  const w = lbBitmap.width * sc, h = lbBitmap.height * sc;
+  lbctx.clearRect(0, 0, vw, vh);
+  lbctx.drawImage(lbBitmap, (vw - w) / 2 + lbTx, (vh - h) / 2 + lbTy, w, h);
+}
+function closeLightbox(){ $('lightbox').hidden = true; lbBitmap = null; lbPtrs.clear(); lbGesture = null; lbPinch = null; }
+$('lbClose').addEventListener('click', closeLightbox);
+$('lightbox').addEventListener('pointerdown', e => {
+  if(e.target === $('lbClose')) return;
+  e.preventDefault();
+  try{ lbCanvas.setPointerCapture(e.pointerId); }catch(_){}
+  lbPtrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  if(lbPtrs.size === 2){
+    const [a, b] = [...lbPtrs.values()];
+    lbPinch = {d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: lbZ}; lbGesture = 'pinch';
+  } else if(lbPtrs.size === 1){
+    const now = Date.now();
+    if(now - lbTapT < 300){                 /* Doppeltipp: Zoom umschalten */
+      if(lbZ > 1.05){ lbZ = 1; lbTx = 0; lbTy = 0; } else lbZ = 2.5;
+      lbClamp(); lbDraw(); lbTapT = 0; lbGesture = 'dead'; return;
+    }
+    lbTapT = now; lbGesture = 'pan'; lbLast = {x: e.clientX, y: e.clientY};
+  }
+});
+$('lightbox').addEventListener('pointermove', e => {
+  if(!lbPtrs.has(e.pointerId)) return;
+  lbPtrs.set(e.pointerId, {x: e.clientX, y: e.clientY});
+  if(lbGesture === 'pinch' && lbPtrs.size >= 2){
+    e.preventDefault();
+    const [a, b] = [...lbPtrs.values()];
+    lbZ = Math.min(6, Math.max(1, lbPinch.z0 * (Math.hypot(a.x - b.x, a.y - b.y) / lbPinch.d0)));
+    lbClamp(); lbDraw();
+  } else if(lbGesture === 'pan' && lbLast && lbZ > 1.001){
+    e.preventDefault();
+    lbTx += e.clientX - lbLast.x; lbTy += e.clientY - lbLast.y;
+    lbLast = {x: e.clientX, y: e.clientY}; lbClamp(); lbDraw();
+  }
+});
+function lbEnd(e){
+  lbPtrs.delete(e.pointerId);
+  if(lbPtrs.size === 0) lbGesture = null;
+  else if(lbGesture === 'pinch' && lbPtrs.size < 2) lbGesture = 'dead';
+}
+$('lightbox').addEventListener('pointerup', lbEnd);
+$('lightbox').addEventListener('pointercancel', lbEnd);
+window.addEventListener('resize', ()=>{ if(!$('lightbox').hidden && lbBitmap){ lbFit(); lbDraw(); } });
+
+/* Antippen eines Vergleichsbildes öffnet die Vollbild-Lupe */
+$('cmpImgs').addEventListener('click', e => {
+  const cv = e.target.closest('canvas'); if(!cv) return;
+  openLightbox(cmpSel[+cv.dataset.i]);
 });
 
 /* ============================================================
@@ -1673,7 +1815,19 @@ async function runKI(){
       const headPair = VIEWS[view].headKp === 'ear'
         ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
       const hd = pair(headPair[0], headPair[1], 'headL', 'headR', 0);
-      const sh = pair('left_shoulder','right_shoulder','shL','shR', 0);
+      /* Schultern: KI liefert das Gelenk zu weit innen – nach außen auf den
+         Schulterknochen (Acromion) schieben, damit die Schulterlinie stimmt */
+      const shoulderPair = ()=>{
+        const A = get('left_shoulder'), B = get('right_shoulder');
+        if(!A || !B) return null;
+        const L = A.x <= B.x ? A : B, R = A.x <= B.x ? B : A;
+        const out = (R.x - L.x) * SHOULDER_OUT;
+        const Lo = {x: L.x - out, y: L.y}, Ro = {x: R.x + out, y: R.y};
+        if(put('shL', Lo)) set++;
+        if(put('shR', Ro)) set++;
+        return {L: Lo, R: Ro};
+      };
+      const sh = shoulderPair();
       if(!hd && VIEWS[view].headKp === 'ear' && sh){
         /* Ohren sind von hinten oft unsicher: Ohrhöhe aus der Schulterbreite schätzen */
         const mx2 = (sh.L.x + sh.R.x)/2, my2 = (sh.L.y + sh.R.y)/2;
@@ -1739,14 +1893,187 @@ function updateExamUI(){
   $('examRow').hidden = !on;
   $('btnSingle').hidden = on || singleOpen;
   $('photoRow').hidden = !(on || singleOpen);
-  if(on) $('btnExamNext').disabled = !(img && state === 'done');
-  if(on && !img){
-    $('emptyTitle').textContent = `Ansicht ${exam.idx+1} von ${exam.len} · ${VIEWS[EXAM_ORDER[exam.idx]].label}`;
-    $('emptySub').textContent = 'Foto aufnehmen oder auswählen – die KI setzt die Punkte vor, du korrigierst nur.';
-  } else if(!on){
+  $('btnPhotoDel').hidden = !(on && img);
+  updateExamTabs();
+  if(on){
+    const anyDone = exam.views.some(v =>
+      v === view ? state === 'done' : (exam.buf[v] && exam.buf[v].state === 'done'));
+    $('btnExamDone').disabled = !anyDone;
+    if(!img){
+      $('emptyTitle').textContent = `${TAB_SHORT[view]} · Foto aufnehmen oder auswählen`;
+      $('emptySub').textContent = 'Kamera nimmt ein Foto pro Ansicht auf; aus der Galerie kannst du auch mehrere auf einmal wählen. Die KI setzt die Punkte vor.';
+    }
+  } else {
     $('emptyTitle').textContent = 'Neue Analyse';
-    $('emptySub').textContent = 'Der geführte Ablauf nimmt alle 4 Ansichten nacheinander auf – Vorne, Rechts, Hinten, Links.';
+    $('emptySub').textContent = 'Geführter Ablauf: gewählte Ansichten aufnehmen, frei zwischen ihnen wechseln – gespeichert wird am Ende.';
   }
+}
+
+/* ---------- Editor-Zustand pro Ansicht (Untersuchung) ---------- */
+function showEditor(on){
+  wrap.style.display = on ? 'block' : 'none';
+  $('resultsCard').style.display = on ? 'block' : 'none';
+  $('emptyState').style.display = on ? 'none' : 'block';
+  $('guideBar').style.display = (on || exam) ? 'block' : 'none';
+}
+function clearEditorState(){
+  img = null; imgOriginal = null; imgAlpha = false;
+  pts = {}; placeOrder = []; state = 'empty'; editingId = null; kiHints = {};
+  z = 1; tx = 0; ty = 0; plumbOff = 0; plumbTilt = 0;
+  kiMsgHide(); updateZoomChip(); tiltReset();
+}
+function updateExamTabs(){
+  for(const b of document.querySelectorAll('#segRow button')){
+    const v = b.dataset.view;
+    if(exam){
+      const inExam = exam.views.includes(v);
+      b.disabled = !inExam;
+      b.style.opacity = inExam ? '' : '.4';
+      const done = (v === view) ? (state === 'done')
+                                : (exam.buf[v] && exam.buf[v].state === 'done');
+      b.textContent = (done ? '✓ ' : '') + TAB_SHORT[v];
+      b.classList.toggle('active', v === view);
+    } else {
+      b.disabled = false; b.style.opacity = '';
+      b.textContent = TAB_SHORT[v];
+      b.classList.toggle('active', v === view);
+    }
+  }
+}
+function stashView(){
+  if(!exam) return;
+  if(img){
+    exam.buf[view] = {
+      img, imgOriginal, iw, ih,
+      pts: JSON.parse(JSON.stringify(pts)), placeOrder: placeOrder.slice(),
+      state, plumbOff, plumbTilt, imgAlpha, kiHints, needsKI: false
+    };
+  } else delete exam.buf[view];
+}
+function restoreView(v){
+  const b = exam.buf[v];
+  if(b){
+    img = b.img; imgOriginal = b.imgOriginal || null; iw = b.iw; ih = b.ih;
+    pts = JSON.parse(JSON.stringify(b.pts)); placeOrder = b.placeOrder.slice();
+    state = b.state; plumbOff = b.plumbOff; plumbTilt = b.plumbTilt;
+    imgAlpha = b.imgAlpha; kiHints = b.kiHints || {};
+    z = 1; tx = 0; ty = 0; editingId = null; kiMsgHide(); updateZoomChip();
+    return true;
+  }
+  clearEditorState();
+  return false;
+}
+function switchExamView(v){
+  if(!exam || !exam.views.includes(v) || v === view) return;
+  stashView();
+  view = v;
+  const has = restoreView(v);
+  showEditor(has);
+  if(has){
+    render();
+    const b = exam.buf[v];
+    if(b && b.needsKI){ b.needsKI = false; autoPrep(); }
+  }
+  updateExamTabs(); updateExamUI(); updateGuide(); updateMetrics();
+}
+function examNext(){
+  if(!exam) return;
+  stashView();
+  const order = exam.views, i = order.indexOf(view);
+  const nv = order[(i + 1) % order.length];
+  view = nv;
+  const has = restoreView(nv);
+  showEditor(has);
+  updateExamTabs();
+  if(has){
+    render();
+    const b = exam.buf[nv];
+    if(b && b.needsKI){ b.needsKI = false; autoPrep(); }
+    updateExamUI(); updateGuide(); updateMetrics();
+  } else {
+    updateExamUI(); updateGuide(); updateMetrics();
+    if(exam.camMode) $('fileCam').click();   /* Zusatz A: nächste Ansicht direkt per Kamera */
+  }
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+function snapshotFromBuf(v, b){
+  const maxE = 1400, k = Math.min(1, maxE / Math.max(b.iw, b.ih));
+  const w = Math.round(b.iw*k), h = Math.round(b.ih*k);
+  const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
+  oc.getContext('2d').drawImage(b.img, 0, 0, w, h);
+  const p2 = {}; for(const id in b.pts) p2[id] = {x: b.pts[id].x*k, y: b.pts[id].y*k};
+  const mime = b.imgAlpha ? 'image/png' : 'image/jpeg';
+  return {
+    id: 's' + Date.now() + Math.random().toString(36).slice(2,6),
+    dateStr: $('sessDate').value || todayISO(), created: Date.now(),
+    patient: $('patient').value.trim(), view: v, notes: $('notes').value.trim(),
+    imgData: oc.toDataURL(mime, 0.85), alpha: b.imgAlpha,
+    iw: w, ih: h, pts: p2, plumbOff: b.plumbOff * k, plumbTilt: b.plumbTilt
+  };
+}
+function examFinish(){
+  if(!exam) return;
+  stashView();
+  const ids = [];
+  for(const v of exam.views){
+    const b = exam.buf[v];
+    if(b && b.img && b.state === 'done'){
+      const s = snapshotFromBuf(v, b);
+      const i = sessions.findIndex(x => x.id === s.id);
+      if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; } else sessions.push(s);
+      ids.push(s.id);
+    }
+  }
+  const total = exam.views.length;
+  if(!ids.length){ alert('Noch keine Ansicht fertig – bitte mindestens eine Ansicht mit gesetzten Punkten.'); return; }
+  if(ids.length < total && !confirm(`${ids.length} von ${total} Ansichten sind fertig.\nNur die fertigen speichern und Untersuchung abschließen?`)) return;
+  exam = null;
+  renderSessions();
+  resetToEmpty(); updateExamTabs(); updateExamUI(); updateGuide(); updateMetrics();
+  buildPreview(ids);
+}
+function decodeToBuf(file){
+  return new Promise(res => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = ()=>{
+      let w = im.naturalWidth, h = im.naturalHeight, src = im;
+      const MAXWORK = 2200;
+      if(Math.max(w, h) > MAXWORK){
+        const kk = MAXWORK / Math.max(w, h);
+        const wc = document.createElement('canvas');
+        wc.width = Math.round(w*kk); wc.height = Math.round(h*kk);
+        wc.getContext('2d').drawImage(im, 0, 0, wc.width, wc.height);
+        src = wc; w = wc.width; h = wc.height;
+      }
+      URL.revokeObjectURL(url);
+      res({img: src, imgOriginal: null, iw: w, ih: h, pts: {}, placeOrder: [],
+        state: 'placing', plumbOff: 0, plumbTilt: 0, imgAlpha: false, kiHints: {}, needsKI: true});
+    };
+    im.onerror = ()=>{ URL.revokeObjectURL(url); res(null); };
+    im.src = url;
+  });
+}
+async function distributeGallery(files){
+  stashView();
+  const empties = exam.views.filter(v => !(exam.buf[v] && exam.buf[v].img));
+  const n = Math.min(files.length, empties.length);
+  let first = null;
+  for(let i = 0; i < n; i++){
+    const buf = await decodeToBuf(files[i]);
+    if(!buf) continue;
+    exam.buf[empties[i]] = buf;
+    if(first === null) first = empties[i];
+  }
+  if(files.length > empties.length)
+    alert(`Es gab ${empties.length} freie Ansicht(en), du hast ${files.length} Fotos gewählt – die überzähligen wurden ignoriert.`);
+  const goto = first || view;
+  view = goto;
+  const has = restoreView(goto);
+  showEditor(has);
+  updateExamTabs();
+  if(has){ render(); const b = exam.buf[goto]; if(b && b.needsKI){ b.needsKI = false; autoPrep(); } }
+  updateExamUI(); updateGuide(); updateMetrics();
 }
 $('btnSingle').addEventListener('click', ()=>{
   singleOpen = true; updateExamUI();
@@ -1763,45 +2090,21 @@ function resetToEmpty(){
 }
 
 $('btnExam').addEventListener('click', ()=>{
-  exam = {idx: 0, ids: {}, len: examLen};
-  editingId = null;
+  exam = {len: examLen, views: EXAM_ORDER.slice(0, examLen), buf: {}, camMode: false};
+  editingId = null; singleOpen = false;
   $('previewCard').style.display = 'none';
-  resetToEmpty();
-  setView(EXAM_ORDER[0], true);
-  updateExamUI(); updateGuide(); updateMetrics();
-});
-
-function examAdvance(save){
-  if(save){
-    if(!(img && state === 'done')) return;
-    const s = snapshotSession();
-    const i = sessions.findIndex(x => x.id === s.id);
-    if(i >= 0){ s.created = sessions[i].created; sessions[i] = s; }
-    else sessions.push(s);
-    exam.ids[view] = s.id;
-    editingId = null;
-    renderSessions();
-  }
-  exam.idx++;
-  if(exam.idx >= exam.len){
-    const ids = EXAM_ORDER.slice(0, exam.len).map(v => exam.ids[v]).filter(Boolean);
-    exam = null;
-    resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
-    if(ids.length) buildPreview(ids);
-    else alert('Keine Ansichten gespeichert.');
-    return;
-  }
-  resetToEmpty();
-  setView(EXAM_ORDER[exam.idx], true);
-  updateExamUI(); updateGuide(); updateMetrics();
+  view = exam.views[0];
+  clearEditorState();
+  showEditor(false);
+  updateExamTabs(); updateExamUI(); updateGuide(); updateMetrics();
   window.scrollTo({top: 0, behavior: 'smooth'});
-}
-$('btnExamNext').addEventListener('click', ()=> examAdvance(true));
-$('btnExamSkip').addEventListener('click', ()=> examAdvance(false));
+});
+$('btnExamNext').addEventListener('click', examNext);
+$('btnExamDone').addEventListener('click', examFinish);
 $('btnExamStop').addEventListener('click', ()=>{
-  if(!confirm('Untersuchung beenden? Bereits gespeicherte Ansichten bleiben im Verlauf.')) return;
+  if(!confirm('Untersuchung beenden? Noch nicht gespeicherte Aufnahmen gehen verloren.')) return;
   exam = null;
-  resetToEmpty(); updateExamUI(); updateGuide(); updateMetrics();
+  resetToEmpty(); updateExamTabs(); updateExamUI(); updateGuide(); updateMetrics();
 });
 
 async function buildPreview(ids){
@@ -1810,13 +2113,16 @@ async function buildPreview(ids){
   box.innerHTML = '';
   const sel = ids.map(id => sessions.find(x => x.id === id)).filter(Boolean);
   $('prevTitle').textContent = `Untersuchung · ${fmtDate(sel[0] ? sel[0].dateStr : todayISO())} · ${sel.length} Ansicht${sel.length===1?'':'en'}`;
-  for(const s of sel){
+  for(let i = 0; i < sel.length; i++){
+    const s = sel[i];
     const div = document.createElement('div'); div.className = 'slide';
-    const cv = document.createElement('canvas'); div.appendChild(cv);
+    const cv = document.createElement('canvas'); cv.dataset.i = i; div.appendChild(cv);
+    const zh = document.createElement('div'); zh.className = 'zoomhint'; zh.textContent = '🔍'; div.appendChild(zh);
     const cap = document.createElement('div'); cap.className = 'cap mono';
     cap.textContent = VIEWS[s.view].label; div.appendChild(cap);
     box.appendChild(div);
   }
+  box.onclick = e => { const cv = e.target.closest('canvas'); if(cv) openLightbox(sel[+cv.dataset.i]); };
   $('previewCard').style.display = 'block';
   const cssW = box.clientWidth || 340;
   const dpr = window.devicePixelRatio || 1;
@@ -1836,7 +2142,7 @@ $('btnPrevClose').addEventListener('click', ()=>{ $('previewCard').style.display
 $('btnExamSave').addEventListener('click', ()=>{
   const sel = previewIds.map(id => sessions.find(x => x.id === id)).filter(Boolean);
   if(!sel.length) return;
-  exportSessions(sel, `lotlinie_daten_${safeName(sel[0].patient)}_${sel[0].dateStr}.json`);
+  exportSessions(sel, `${safeName(sel[0].patient)}_lotlinie_daten_${sel[0].dateStr}.json`);
 });
 
 async function shareOrDownloadBlob(blob, name, mime){
@@ -2366,8 +2672,10 @@ async function autoPrep(){
 }
 
 /* Debug-Schnittstelle für automatisierte Tests */
-window.__lot = { get: ()=>({z, tx, ty, state, gesture, view, examIdx: exam ? exam.idx : null, tiltDeg, plumbOff, plumbTilt, imgAlpha,
-  placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts))}) };
+window.__lot = { get: ()=>({z, tx, ty, state, gesture, view,
+  exam: exam ? {views: exam.views.slice(), buf: Object.keys(exam.buf), camMode: exam.camMode} : null,
+  tiltDeg, plumbOff, plumbTilt, imgAlpha, imgLoaded: !!img,
+  placed: placeOrder.slice(), pts: JSON.parse(JSON.stringify(pts)), sessions: sessions.length}) };
 
 /* Modelle beim Start vorladen: erstes Foto fühlt sich sofort schnell an */
 if(AUTO_KI){
