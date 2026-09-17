@@ -368,6 +368,8 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 'use strict';
 const AUTO_KI = !/[?&]noki=1/.test(location.search);   /* ?noki=1 deaktiviert Auto-Vorschläge */
 const SHOULDER_OUT = 0.18;   /* KI-Schulterpunkte je Seite um diesen Anteil der Schulterbreite nach außen (Acromion) */
+const SHOULDER_UP  = 0.10;   /* … und um diesen Anteil nach oben: das Acromion ist der höchste Punkt der Schulter */
+const ACROMION_UP  = 0.08;   /* seitlich: Anhebung des KI-Schultergelenks aufs Acromion, Anteil der Rumpflänge */
 /* ============================================================
    Lotlinie – Haltungsanalyse mit Verlaufsvergleich
    Landmarken per geführtem Fingertipp (mit Lupe), Winkel werden
@@ -1821,8 +1823,15 @@ async function runKI(){
       const ear = best('left_ear','right_ear'), sh = best('left_shoulder','right_shoulder'),
             hip = best('left_hip','right_hip'), kn = best('left_knee','right_knee'),
             an  = best('left_ankle','right_ankle');
+      /* KI liefert das Schultergelenk – das Acromion (höchster Punkt der
+         Schulter) liegt darüber: anhand der Rumpflänge anheben */
+      let acr = sh;
+      if(sh){
+        const ref = hip ? Math.abs(hip.y - sh.y) : (ear ? Math.abs(sh.y - ear.y) * 1.9 : 0);
+        if(ref > 0) acr = {x: sh.x, y: sh.y - ref * ACROMION_UP};
+      }
       if(put('tragus', ear)) set++;
-      if(put('acromion', sh)) set++;
+      if(put('acromion', acr)) set++;
       if(put('trochanter', hip)) set++;
       if(put('knee', kn)) set++;
       if(put('malleolus', an)) set++;
@@ -1838,14 +1847,16 @@ async function runKI(){
       const headPair = VIEWS[view].headKp === 'ear'
         ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
       const hd = pair(headPair[0], headPair[1], 'headL', 'headR', 0);
-      /* Schultern: KI liefert das Gelenk zu weit innen – nach außen auf den
-         Schulterknochen (Acromion) schieben, damit die Schulterlinie stimmt */
+      /* Schultern: KI liefert das Gelenk zu weit innen und zu tief – nach
+         außen und oben auf den höchsten Punkt der Schulter (Acromion)
+         schieben, damit die Schulterlinie stimmt */
       const shoulderPair = ()=>{
         const A = get('left_shoulder'), B = get('right_shoulder');
         if(!A || !B) return null;
         const L = A.x <= B.x ? A : B, R = A.x <= B.x ? B : A;
         const out = (R.x - L.x) * SHOULDER_OUT;
-        const Lo = {x: L.x - out, y: L.y}, Ro = {x: R.x + out, y: R.y};
+        const up  = (R.x - L.x) * SHOULDER_UP;
+        const Lo = {x: L.x - out, y: L.y - up}, Ro = {x: R.x + out, y: R.y - up};
         if(put('shL', Lo)) set++;
         if(put('shR', Ro)) set++;
         return {L: Lo, R: Ro};
@@ -2595,13 +2606,43 @@ async function buildSoftCutout(seg, source, cw, ch){
     const mx = (x1-x0)*0.06 + 3, my = (y1-y0)*0.04 + 3;
     const bx = Math.max(0, (x0-mx)/k1), by = Math.max(0, (y0-my)/k1);
     const bw = Math.min(cw, (x1+mx)/k1) - bx, bh = Math.min(ch, (y1+my)/k1) - by;
-    const e2 = 768, k2 = Math.min(1, e2 / Math.max(bw, bh));
-    const s2 = document.createElement('canvas');
-    s2.width = Math.round(bw*k2); s2.height = Math.round(bh*k2);
-    s2.getContext('2d').drawImage(source, bx, by, bw, bh, 0, 0, s2.width, s2.height);
-    const m2 = await softMask(s2);
-    if(m2) mfx.drawImage(m2, bx, by, bw, bh);
-    else mfx.drawImage(m1, 0, 0, cw, ch);
+    /* Pass 2 in überlappenden Kacheln: das Modell arbeitet intern mit
+       256×256 – ein hochformatiger Ganzkörper-Ausschnitt würde stark
+       gestaucht und die Kanten grob. Kacheln mit moderatem Seitenverhältnis
+       liefern deutlich feinere Ränder; an den inneren Rändern werden die
+       Masken komplementär überblendet (keine Nahtstellen). */
+    const tileH = Math.min(bh, Math.max(bw * 1.25, bh * 0.55));
+    const n = Math.min(3, Math.max(1, Math.ceil((bh - tileH*0.22) / (tileH*0.78))));
+    const step = n > 1 ? (bh - tileH) / (n - 1) : 0;
+    const ovl = n > 1 ? (tileH - step) : 0;
+    let okTiles = 0;
+    for(let t = 0; t < n; t++){
+      const ty = by + t * step;
+      const e2 = 640, k2 = Math.min(1, e2 / Math.max(bw, tileH));
+      const s2 = document.createElement('canvas');
+      s2.width = Math.max(1, Math.round(bw*k2)); s2.height = Math.max(1, Math.round(tileH*k2));
+      s2.getContext('2d').drawImage(source, bx, ty, bw, tileH, 0, 0, s2.width, s2.height);
+      const m2 = await softMask(s2);
+      if(!m2) continue;
+      okTiles++;
+      const fc = document.createElement('canvas'); fc.width = m2.width; fc.height = m2.height;
+      const fx = fc.getContext('2d');
+      fx.drawImage(m2, 0, 0);
+      if(n > 1){
+        const ov = Math.max(1, ovl * k2) / fc.height;
+        const g = fx.createLinearGradient(0, 0, 0, fc.height);
+        g.addColorStop(0, t > 0 ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+        if(t > 0) g.addColorStop(Math.min(1, ov), 'rgba(0,0,0,1)');
+        if(t < n-1) g.addColorStop(Math.max(0, 1 - ov), 'rgba(0,0,0,1)');
+        g.addColorStop(1, t < n-1 ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)');
+        fx.globalCompositeOperation = 'destination-in';
+        fx.fillStyle = g; fx.fillRect(0, 0, fc.width, fc.height);
+      }
+      mfx.globalCompositeOperation = 'lighter';
+      mfx.drawImage(fc, bx, ty, bw, tileH);
+    }
+    mfx.globalCompositeOperation = 'source-over';
+    if(!okTiles) mfx.drawImage(m1, 0, 0, cw, ch);
   } else {
     mfx.drawImage(m1, 0, 0, cw, ch);
   }
