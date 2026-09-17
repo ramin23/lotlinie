@@ -608,7 +608,7 @@ function paintAnalysis(c2, image, srcW, srcH, p, v, cssW, cssH, zz = 1, ox = 0, 
     c2.stroke();
   };
   grid(0.35);
-  c2.drawImage(image, ox, oy, cssW*zz, cssH*zz);
+  c2.drawImage(image, ox, oy, srcW*s, srcH*s);   /* proportional – Kachel darf anderes Seitenverhältnis haben */
   grid(0.10);
   c2.lineCap = 'round'; c2.lineJoin = 'round';
 
@@ -1444,6 +1444,28 @@ function ensureImg(s){
   });
 }
 
+/* Standard-Größe für Vergleich/Vorschau/PDF: Die Person erscheint in allen
+   Kacheln gleich groß, egal wie nah die Kamera bei der Aufnahme war.
+   Grundlage ist die Spannweite der gesetzten Punkte (Kopf → Sprunggelenk);
+   sie wird auf einen festen Anteil der Kachelhöhe skaliert und die Person
+   mittig platziert. Ohne Punkte: Bild einfach einpassen. */
+const STD_ASPECT = 1.5;              /* Kachel-Höhe = 1,5 × Breite */
+const STD_SPAN = 0.74;               /* Punkt-Spannweite = 74 % der Kachelhöhe */
+function stdFit(s, cssW, cssH){
+  const P = Object.values(s.pts || {});
+  const fit = ()=>{
+    const k = Math.min(cssW / s.iw, cssH / s.ih);
+    return {zz: k*s.iw/cssW, ox: (cssW - s.iw*k)/2, oy: (cssH - s.ih*k)/2};
+  };
+  if(P.length < 2) return fit();
+  const ys = P.map(p => p.y), xs = P.map(p => p.x);
+  const top = Math.min(...ys), bot = Math.max(...ys);
+  if(bot - top < 8) return fit();
+  const k = cssH*STD_SPAN / (bot - top);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  return {zz: k*s.iw/cssW, ox: cssW/2 - cx*k, oy: cssH/2 - (top + bot)/2*k};
+}
+
 $('btnCompare').addEventListener('click', async ()=>{
   let sel = sortedSessions().filter(s => selIds.has(s.id));
   if(sel.length < 2) sel = sortedSessions();   /* nichts angehakt: einfach alles vergleichen */
@@ -1478,13 +1500,14 @@ $('btnCompare').addEventListener('click', async ()=>{
     const im = await ensureImg(s);
     const cv = imgsEl.querySelector(`canvas[data-i="${i}"]`);
     const cssW = cv.parentElement.clientWidth || 240;
-    const cssH = Math.round(cssW * s.ih / s.iw);
+    const cssH = Math.round(cssW * STD_ASPECT);      /* einheitliche Kachel */
     const dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr,0,0,dpr,0,0);
-    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+    const n = stdFit(s, cssW, cssH);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
   }));
 
   /* Tabelle */
@@ -2126,15 +2149,16 @@ async function buildPreview(ids){
   $('previewCard').style.display = 'block';
   const cssW = box.clientWidth || 340;
   const dpr = window.devicePixelRatio || 1;
+  const cssH = Math.min(Math.round(cssW * STD_ASPECT), Math.round(window.innerHeight * 0.72));
   await Promise.all(sel.map(async (s, i)=>{
     const im = await ensureImg(s);
     const cv = box.children[i].querySelector('canvas');
-    const cssH = Math.round(cssW * s.ih / s.iw);
     cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr, 0, 0, dpr, 0, 0);
-    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
+    const n = stdFit(s, cssW, cssH);
+    paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
   }));
   $('previewCard').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -2201,10 +2225,11 @@ $('btnExamPDF').addEventListener('click', async ()=>{
     const items = [];
     for(const s of sel){
       const im = await ensureImg(s);
-      const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
+      const rw = 600, rh = Math.round(rw * STD_ASPECT);   /* Standard-Format, Person normiert */
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
-      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: VIEWS[s.view].label});
+      const n = stdFit(s, rw, rh);
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: rw / rh, label: VIEWS[s.view].label});
     }
     pdfImageRow(doc, items, imgTop, maxH, M, W);
 
@@ -2268,10 +2293,11 @@ $('btnCmpPDF').addEventListener('click', async ()=>{
     const items = [];
     for(const s of sel){
       const im = await ensureCutout(s);
-      const rw = Math.min(700, s.iw), rh = Math.round(rw * s.ih / s.iw);
+      const rw = 600, rh = Math.round(rw * STD_ASPECT);   /* Standard-Format, Person normiert */
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
-      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
+      const n = stdFit(s, rw, rh);
+      paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+      items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: rw / rh, label: fmtDate(s.dateStr)});
     }
     pdfImageRow(doc, items, imgTop, maxH, M, W);
 
@@ -2480,10 +2506,11 @@ async function buildExamComparePDF(sel, dates){
       const items = [];
       for(const s of [sa, sb]){
         const im = await ensureCutout(s);
-        const rw = Math.min(650, s.iw), rh = Math.round(rw * s.ih / s.iw);
+        const rw = 600, rh = Math.round(rw * STD_ASPECT);   /* Standard-Format, Person normiert */
         const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, 1, 0, 0, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
-        items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: s.iw / s.ih, label: fmtDate(s.dateStr)});
+        const n = stdFit(s, rw, rh);
+        paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
+        items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: rw / rh, label: fmtDate(s.dateStr)});
       }
       doc.setFont('helvetica','normal');
       pdfImageRow(doc, items, imgTop, maxH, M, W);
