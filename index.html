@@ -350,7 +350,7 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 
   <div class="privacy">Alle Fotos und Daten verbleiben auf diesem Gerät. Aufnahmen werden als Dateien
   exportiert – du entscheidest, wo sie abgelegt werden (z.&nbsp;B. in der Patientenakte).</div>
-  <div class="privacy mono" style="margin-top:2px">Version 4.4 · Stand 21.07.2026</div>
+  <div class="privacy mono" style="margin-top:2px">Version 4.5 · Stand 22.09.2026</div>
 </main>
 </div>
 
@@ -367,9 +367,21 @@ main{max-width:680px;margin:0 auto;padding:0 12px 40px;display:flex;flex-directi
 <script>
 'use strict';
 const AUTO_KI = !/[?&]noki=1/.test(location.search);   /* ?noki=1 deaktiviert Auto-Vorschläge */
-const SHOULDER_OUT = 0.18;   /* KI-Schulterpunkte je Seite um diesen Anteil der Schulterbreite nach außen (Acromion) */
-const SHOULDER_UP  = 0.10;   /* … und um diesen Anteil nach oben: das Acromion ist der höchste Punkt der Schulter */
-const ACROMION_UP  = 0.08;   /* seitlich: Anhebung des KI-Schultergelenks aufs Acromion, Anteil der Rumpflänge */
+/* Anatomische Nachkorrektur der MoveNet-Punkte. Alle Werte sind Anteile
+   einer am Körper gemessenen Strecke und dadurch unabhängig von Fotoabstand
+   und Auflösung. Sie sind bewusst zentral gebündelt und leicht feinjustierbar. */
+const ANATOMY = Object.freeze({
+  minScore: 0.12,             /* darunter nur als letzter Fallback verwenden */
+  shoulderOut: 0.045,         /* Acromion: Anteil der Schulterbreite nach lateral */
+  shoulderUp: 0.035,          /* Acromion: Anteil der Rumpflänge nach kranial */
+  iliacUp: 0.17,              /* Crista iliaca: Anteil Hüfte→Schulter */
+  iliacOut: 0.025,            /* Crista iliaca leicht lateral der KI-Hüfte */
+  ankleIn: 0.008,             /* Gelenkmitte: Anteil Kopf→Sprunggelenk nach medial */
+  tragusToNose: 0.12,         /* Ohr-Keypoint Richtung Nase auf den Tragus */
+  sideAcromionUp: 0.04,       /* seitliches Acromion: Anteil der Rumpflänge */
+  sideTrochanterDown: 0.012,  /* KI-Hüfte Richtung Trochanter major */
+  maxLowConfidencePairSlope: 0.30
+});
 /* ============================================================
    Lotlinie – Haltungsanalyse mit Verlaufsvergleich
    Landmarken per geführtem Fingertipp (mit Lupe), Winkel werden
@@ -1446,26 +1458,79 @@ function ensureImg(s){
   });
 }
 
-/* Standard-Größe für Vergleich/Vorschau/PDF: Die Person erscheint in allen
-   Kacheln gleich groß, egal wie nah die Kamera bei der Aufnahme war.
-   Grundlage ist die Spannweite der gesetzten Punkte (Kopf → Sprunggelenk);
-   sie wird auf einen festen Anteil der Kachelhöhe skaliert und die Person
-   mittig platziert. Ohne Punkte: Bild einfach einpassen. */
-const STD_ASPECT = 1.5;              /* Kachel-Höhe = 1,5 × Breite */
-const STD_SPAN = 0.74;               /* Punkt-Spannweite = 74 % der Kachelhöhe */
-function stdFit(s, cssW, cssH){
-  const P = Object.values(s.pts || {});
-  const fit = ()=>{
+/* Einheitliche Körpergröße für Vergleich, Vorschau und alle PDFs.
+   Maßstab ist ausschließlich die anatomische Körperachse Kopfmitte →
+   Sprunggelenksmitte (seitlich: Tragus → Malleolus), nie die Bildgröße oder
+   der Leerraum. Ein robuster Landmark-Fallback greift bei älteren Importen. */
+const BODY_TILE_ASPECT = 1.5;         /* Kachel-Höhe = 1,5 × Breite */
+const BODY_AXIS_SHARE = 0.76;         /* Körperachse belegt 76 % der Kachelhöhe */
+const BODY_CENTER_Y = 0.49;           /* etwas mehr Platz unter den Füßen */
+function median(values){
+  const a = values.filter(Number.isFinite).sort((x,y)=>x-y);
+  if(!a.length) return null;
+  const m = Math.floor(a.length/2);
+  return a.length % 2 ? a[m] : (a[m-1] + a[m])/2;
+}
+function validLandmark(s, id){
+  const p = s.pts && s.pts[id];
+  return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null;
+}
+function pointMean(a, b){
+  if(a && b) return {x:(a.x+b.x)/2, y:(a.y+b.y)/2};
+  return a || b || null;
+}
+function bodyReference(s){
+  const p = s.pts || {};
+  let head = null, ankle = null, centers = [];
+  if(VIEWS[s.view] && VIEWS[s.view].family === 'side'){
+    head = validLandmark(s, 'tragus');
+    ankle = validLandmark(s, 'malleolus');
+    centers = ['tragus','acromion','trochanter','knee','malleolus']
+      .map(id => validLandmark(s,id)).filter(Boolean);
+  } else {
+    head = pointMean(validLandmark(s,'headL'), validLandmark(s,'headR'));
+    ankle = pointMean(validLandmark(s,'ankL'), validLandmark(s,'ankR'));
+    centers = [
+      head,
+      pointMean(validLandmark(s,'shL'), validLandmark(s,'shR')),
+      pointMean(validLandmark(s,'hipL'), validLandmark(s,'hipR')),
+      ankle
+    ].filter(Boolean);
+  }
+  if(head && ankle){
+    const span = Math.hypot(ankle.x-head.x, ankle.y-head.y);
+    if(span >= Math.max(12, (s.ih || 0)*0.10)){
+      return {
+        span,
+        x: median(centers.map(q=>q.x)) ?? (head.x+ankle.x)/2,
+        y: (head.y+ankle.y)/2,
+        source: 'axis'
+      };
+    }
+  }
+  /* Fallback: Ausreißer nicht mit min/max übernehmen, sondern bei vielen
+     Punkten die inneren Quantile verwenden. */
+  const all = Object.values(p).filter(q => q && Number.isFinite(q.x) && Number.isFinite(q.y));
+  if(all.length < 2) return null;
+  const ys = all.map(q=>q.y).sort((a,b)=>a-b);
+  const trim = ys.length >= 5 ? 1 : 0;
+  const top = ys[trim], bottom = ys[ys.length-1-trim];
+  if(bottom-top < 8) return null;
+  return {span:bottom-top, x:median(all.map(q=>q.x)), y:(top+bottom)/2, source:'fallback'};
+}
+function normalizedBodyFit(s, cssW, cssH){
+  const fitImage = ()=>{
     const k = Math.min(cssW / s.iw, cssH / s.ih);
-    return {zz: k*s.iw/cssW, ox: (cssW - s.iw*k)/2, oy: (cssH - s.ih*k)/2};
+    return {zz:k*s.iw/cssW, ox:(cssW-s.iw*k)/2, oy:(cssH-s.ih*k)/2};
   };
-  if(P.length < 2) return fit();
-  const ys = P.map(p => p.y), xs = P.map(p => p.x);
-  const top = Math.min(...ys), bot = Math.max(...ys);
-  if(bot - top < 8) return fit();
-  const k = cssH*STD_SPAN / (bot - top);
-  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-  return {zz: k*s.iw/cssW, ox: cssW/2 - cx*k, oy: cssH/2 - (top + bot)/2*k};
+  const ref = bodyReference(s);
+  if(!ref) return fitImage();
+  const k = cssH * BODY_AXIS_SHARE / ref.span;
+  return {
+    zz: k*s.iw/cssW,
+    ox: cssW/2 - ref.x*k,
+    oy: cssH*BODY_CENTER_Y - ref.y*k
+  };
 }
 
 $('btnCompare').addEventListener('click', async ()=>{
@@ -1502,13 +1567,13 @@ $('btnCompare').addEventListener('click', async ()=>{
     const im = await ensureImg(s);
     const cv = imgsEl.querySelector(`canvas[data-i="${i}"]`);
     const cssW = cv.parentElement.clientWidth || 240;
-    const cssH = Math.round(cssW * STD_ASPECT);      /* einheitliche Kachel */
+    const cssH = Math.round(cssW * BODY_TILE_ASPECT);      /* einheitliche Kachel */
     const dpr = window.devicePixelRatio || 1;
     cv.width = Math.round(cssW*dpr); cv.height = Math.round(cssH*dpr);
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr,0,0,dpr,0,0);
-    const n = stdFit(s, cssW, cssH);
+    const n = normalizedBodyFit(s, cssW, cssH);
     paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
   }));
 
@@ -1735,11 +1800,13 @@ async function kiKeypoints(det){
   if(p1[0]) for(const k of p1[0].keypoints)
     kp[k.name] = {x: k.x / inp.k, y: k.y / inp.k, score: k.score};
 
-  const good = Object.values(kp).filter(k => k.score >= 0.2);
+  const good = Object.values(kp).filter(k => k.score >= ANATOMY.minScore);
   if(good.length < 4) return kp;                     /* zu unsicher für Zuschnitt */
   let x0 = Math.min(...good.map(k=>k.x)), x1 = Math.max(...good.map(k=>k.x));
   let y0 = Math.min(...good.map(k=>k.y)), y1 = Math.max(...good.map(k=>k.y));
-  const mx = (x1-x0)*0.30 + 12, my = (y1-y0)*0.10 + 12;
+  /* Genug Rand für Kopf, Acromion und Füße behalten. Gerade bei weiter
+     aufgenommenen Fotos fehlen diese sonst im präziseren zweiten Pass. */
+  const mx = (x1-x0)*0.38 + 14, my = (y1-y0)*0.16 + 14;
   x0 = Math.max(0, x0-mx); x1 = Math.min(iw, x1+mx);
   y0 = Math.max(0, y0-my); y1 = Math.min(ih, y1+my);
   const bw = x1-x0, bh = y1-y0;
@@ -1751,7 +1818,9 @@ async function kiKeypoints(det){
   oc.getContext('2d').drawImage(img, x0, y0, bw, bh, 0, 0, cw, ch);
   const p2 = await det.estimatePoses(oc);
   if(p2[0]) for(const k of p2[0].keypoints){
-    if(k.score >= 0.25) kp[k.name] = {x: x0 + k.x/k2, y: y0 + k.y/k2, score: k.score};
+    const old = kp[k.name];
+    if(k.score >= ANATOMY.minScore && (!old || k.score >= old.score*0.72))
+      kp[k.name] = {x: x0 + k.x/k2, y: y0 + k.y/k2, score: k.score};
   }
   return kp;
 }
@@ -1765,6 +1834,143 @@ function kiInput(){
   const oc = document.createElement('canvas'); oc.width = w; oc.height = h;
   oc.getContext('2d').drawImage(img, 0, 0, w, h);
   return {src: oc, k};
+}
+
+/* ---------- Anatomische Nachkorrektur der Pose-Keypoints ---------- */
+function posePoint(kp, name, minScore = ANATOMY.minScore){
+  const q = kp[name];
+  return q && q.score >= minScore
+    ? {x:q.x, y:q.y, score:q.score, source:name} : null;
+}
+function vecUnit(dx, dy, fallback = {x:0,y:-1}){
+  const d = Math.hypot(dx,dy);
+  return d > 1e-6 ? {x:dx/d, y:dy/d} : fallback;
+}
+function poseMid(a,b){ return a && b ? {x:(a.x+b.x)/2, y:(a.y+b.y)/2} : (a || b || null); }
+function imageOrderedPair(kp, leftName, rightName){
+  const a = posePoint(kp,leftName), b = posePoint(kp,rightName);
+  if(!a || !b) return null;
+  return a.x <= b.x ? {L:a,R:b} : {L:b,R:a};
+}
+function stabilizeLowConfidencePair(pair){
+  if(!pair) return null;
+  const w = Math.max(1, pair.R.x-pair.L.x), dy = pair.R.y-pair.L.y;
+  const lim = w*ANATOMY.maxLowConfidencePairSlope;
+  if(Math.abs(dy) <= lim || Math.min(pair.L.score,pair.R.score) >= 0.28) return pair;
+  const low = pair.L.score < pair.R.score ? pair.L : pair.R;
+  const high = low === pair.L ? pair.R : pair.L;
+  low.y = high.y + Math.sign(low.y-high.y)*lim;
+  return pair;
+}
+function anatomicalPoseSuggestions(kp, v){
+  const suggested = {}, estimated = [];
+  const add = (id,q)=>{ if(q && Number.isFinite(q.x) && Number.isFinite(q.y)) suggested[id] = {x:q.x,y:q.y}; };
+
+  if(VIEWS[v].family === 'side'){
+    /* Ein einziges Seiten-Track für alle Gelenke wählen. Dadurch entsteht
+       keine Zickzack-Linie aus abwechselnd linken/rechten KI-Punkten. */
+    const jointNames = ['ear','shoulder','hip','knee','ankle'];
+    const trackScore = side => jointNames.reduce((sum,j)=> sum + ((kp[`${side}_${j}`]||{}).score || 0), 0);
+    const preferred = v === 'sideR' ? 'right' : 'left';
+    const other = preferred === 'right' ? 'left' : 'right';
+    const side = trackScore(preferred)*1.06 >= trackScore(other) ? preferred : other;
+    const opposite = side === 'right' ? 'left' : 'right';
+    const joint = name => {
+      const primary = posePoint(kp,`${side}_${name}`);
+      if(primary) return primary;
+      const fallback = posePoint(kp,`${opposite}_${name}`,0.22);
+      if(fallback) estimated.push(name === 'ear' ? 'Tragus' : name);
+      return fallback;
+    };
+    const ear = joint('ear'), shoulder = joint('shoulder'), hip = joint('hip'),
+          knee = joint('knee'), ankle = joint('ankle');
+    const torso = shoulder && hip ? Math.hypot(shoulder.x-hip.x,shoulder.y-hip.y)
+      : (hip && knee ? Math.hypot(hip.x-knee.x,hip.y-knee.y)*0.78 : Math.max(iw,ih)*0.16);
+    const superior = shoulder && hip
+      ? vecUnit(shoulder.x-hip.x,shoulder.y-hip.y) : {x:0,y:-1};
+
+    /* MoveNet markiert ungefähr die Ohrmuschelmitte. Die kurze Verschiebung
+       zur Nase landet reproduzierbarer am vorderen Gehörgang/Tragus. */
+    let tragus = ear;
+    const nose = posePoint(kp,'nose',0.10);
+    if(ear && nose){
+      tragus = {x:ear.x+(nose.x-ear.x)*ANATOMY.tragusToNose,
+                y:ear.y+(nose.y-ear.y)*ANATOMY.tragusToNose};
+    }
+    const acromion = shoulder ? {
+      x:shoulder.x+superior.x*torso*ANATOMY.sideAcromionUp,
+      y:shoulder.y+superior.y*torso*ANATOMY.sideAcromionUp
+    } : null;
+    const trochanter = hip ? {
+      x:hip.x-superior.x*torso*ANATOMY.sideTrochanterDown,
+      y:hip.y-superior.y*torso*ANATOMY.sideTrochanterDown
+    } : null;
+    add('tragus',tragus); add('acromion',acromion); add('trochanter',trochanter);
+    add('knee',knee); add('malleolus',ankle);
+    return {suggested, hints:suggested, estimated:[...new Set(estimated)]};
+  }
+
+  const headNames = VIEWS[v].headKp === 'ear'
+    ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
+  let head = stabilizeLowConfidencePair(imageOrderedPair(kp,headNames[0],headNames[1]));
+  const shoulders = stabilizeLowConfidencePair(imageOrderedPair(kp,'left_shoulder','right_shoulder'));
+  const hips = stabilizeLowConfidencePair(imageOrderedPair(kp,'left_hip','right_hip'));
+  const ankles = stabilizeLowConfidencePair(imageOrderedPair(kp,'left_ankle','right_ankle'));
+  const shoulderMid = shoulders && poseMid(shoulders.L,shoulders.R);
+  const hipMid = hips && poseMid(hips.L,hips.R);
+  const ankleMid = ankles && poseMid(ankles.L,ankles.R);
+  const shoulderWidth = shoulders ? Math.hypot(shoulders.R.x-shoulders.L.x,shoulders.R.y-shoulders.L.y) : 0;
+  const torso = shoulderMid && hipMid ? Math.hypot(shoulderMid.x-hipMid.x,shoulderMid.y-hipMid.y)
+    : shoulderWidth*0.9;
+  const superior = shoulderMid && hipMid
+    ? vecUnit(shoulderMid.x-hipMid.x,shoulderMid.y-hipMid.y) : {x:0,y:-1};
+
+  /* Hinteransicht: ist nur ein Ohr sicher, das zweite anhand der stabilen
+     Körpermitte spiegeln. Die Kennzeichnung bleibt als Schätzung sichtbar. */
+  if(!head && VIEWS[v].headKp === 'ear' && shoulderMid && shoulderWidth > 10){
+    const a = posePoint(kp,headNames[0],0.08), b = posePoint(kp,headNames[1],0.08);
+    const one = a || b;
+    if(one){
+      const mirror = {x:2*shoulderMid.x-one.x,y:one.y,score:0.08};
+      head = one.x <= mirror.x ? {L:one,R:mirror} : {L:mirror,R:one};
+      estimated.push('Ohrlinie');
+    }
+  }
+  if(!head && VIEWS[v].headKp === 'ear' && shoulderMid && shoulderWidth > 10){
+    const hy = shoulderMid.y + superior.y*shoulderWidth*0.52;
+    const hx = shoulderMid.x + superior.x*shoulderWidth*0.52;
+    head = {L:{x:hx-shoulderWidth*0.16,y:hy},R:{x:hx+shoulderWidth*0.16,y:hy}};
+    estimated.push('Ohrlinie');
+  }
+  if(head){ add('headL',head.L); add('headR',head.R); }
+
+  if(shoulders){
+    const lateral = vecUnit(shoulders.R.x-shoulders.L.x,shoulders.R.y-shoulders.L.y,{x:1,y:0});
+    const out = shoulderWidth*ANATOMY.shoulderOut, up = torso*ANATOMY.shoulderUp;
+    add('shL',{x:shoulders.L.x-lateral.x*out+superior.x*up,
+               y:shoulders.L.y-lateral.y*out+superior.y*up});
+    add('shR',{x:shoulders.R.x+lateral.x*out+superior.x*up,
+               y:shoulders.R.y+lateral.y*out+superior.y*up});
+  }
+  if(hips){
+    const hipWidth = Math.hypot(hips.R.x-hips.L.x,hips.R.y-hips.L.y);
+    const lateral = vecUnit(hips.R.x-hips.L.x,hips.R.y-hips.L.y,{x:1,y:0});
+    const out = hipWidth*ANATOMY.iliacOut, up = torso*ANATOMY.iliacUp;
+    add('hipL',{x:hips.L.x-lateral.x*out+superior.x*up,
+                y:hips.L.y-lateral.y*out+superior.y*up});
+    add('hipR',{x:hips.R.x+lateral.x*out+superior.x*up,
+                y:hips.R.y+lateral.y*out+superior.y*up});
+  }
+  if(ankles){
+    const headMid = head && poseMid(head.L,head.R);
+    const bodyHeight = headMid && ankleMid ? Math.hypot(headMid.x-ankleMid.x,headMid.y-ankleMid.y) : torso*3.1;
+    const ankleGap = Math.hypot(ankles.R.x-ankles.L.x,ankles.R.y-ankles.L.y);
+    const inward = Math.min(ankleGap*0.08, bodyHeight*ANATOMY.ankleIn);
+    const lateral = vecUnit(ankles.R.x-ankles.L.x,ankles.R.y-ankles.L.y,{x:1,y:0});
+    add('ankL',{x:ankles.L.x+lateral.x*inward,y:ankles.L.y+lateral.y*inward});
+    add('ankR',{x:ankles.R.x-lateral.x*inward,y:ankles.R.y-lateral.y*inward});
+  }
+  return {suggested, hints:suggested, estimated:[...new Set(estimated)]};
 }
 
 async function runKI(){
@@ -1781,108 +1987,15 @@ async function runKI(){
     const kp = await kiKeypoints(det);
     if(loadSeq !== seqAt || img !== cur) return;
     measureTilt(kp);
-    const MIN = 0.2;
-    const get = n => (kp[n] && kp[n].score >= MIN) ? {x: kp[n].x, y: kp[n].y} : null;
-    const best = (a, b)=>{
-      const A = kp[a], B = kp[b];
-      const c = (A && B) ? (A.score >= B.score ? A : B) : (A || B);
-      return (c && c.score >= MIN) ? {x: c.x, y: c.y} : null;
-    };
-    /* grobe Anker für die Setz-Hilfe (auch unsichere Treffer) */
-    kiHints = {};
-    const gh = n => (kp[n] && kp[n].score >= 0.1) ? {x: kp[n].x, y: kp[n].y} : null;
-    const bh = (a, b)=>{ const A = gh(a), B = gh(b);
-      return A && B ? (kp[a].score >= kp[b].score ? A : B) : (A || B); };
-    if(VIEWS[view].family === 'side'){
-      kiHints.tragus = bh('left_ear','right_ear');
-      kiHints.acromion = bh('left_shoulder','right_shoulder');
-      kiHints.trochanter = bh('left_hip','right_hip');
-      kiHints.knee = bh('left_knee','right_knee');
-      kiHints.malleolus = bh('left_ankle','right_ankle');
-    } else {
-      const hp = (nl, nr, idL, idR)=>{
-        const A = gh(nl), B = gh(nr);
-        if(!A || !B) return;
-        kiHints[idL] = A.x <= B.x ? A : B;
-        kiHints[idR] = A.x <= B.x ? B : A;
-      };
-      const hk = VIEWS[view].headKp === 'ear' ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
-      hp(hk[0], hk[1], 'headL', 'headR');
-      hp('left_shoulder','right_shoulder','shL','shR');
-      hp('left_hip','right_hip','hipL','hipR');
-      hp('left_ankle','right_ankle','ankL','ankR');
-    }
-    for(const k2 in kiHints) if(!kiHints[k2]) delete kiHints[k2];
+    const corrected = anatomicalPoseSuggestions(kp,view);
+    kiHints = corrected.hints;
 
     const put = (id, p)=>{ if(p && !pts[id]){
       pts[id] = {x: Math.min(iw, Math.max(0, p.x)), y: Math.min(ih, Math.max(0, p.y))};
       placeOrder.push(id); return true; } return false; };
-    let set = 0; const est = [];
-
-    if(VIEWS[view].family === 'side'){
-      const ear = best('left_ear','right_ear'), sh = best('left_shoulder','right_shoulder'),
-            hip = best('left_hip','right_hip'), kn = best('left_knee','right_knee'),
-            an  = best('left_ankle','right_ankle');
-      /* KI liefert das Schultergelenk – das Acromion (höchster Punkt der
-         Schulter) liegt darüber: anhand der Rumpflänge anheben */
-      let acr = sh;
-      if(sh){
-        const ref = hip ? Math.abs(hip.y - sh.y) : (ear ? Math.abs(sh.y - ear.y) * 1.9 : 0);
-        if(ref > 0) acr = {x: sh.x, y: sh.y - ref * ACROMION_UP};
-      }
-      if(put('tragus', ear)) set++;
-      if(put('acromion', acr)) set++;
-      if(put('trochanter', hip)) set++;
-      if(put('knee', kn)) set++;
-      if(put('malleolus', an)) set++;
-    } else {
-      const pair = (nl, nr, idL, idR, lift)=>{
-        const A = get(nl), B = get(nr);
-        if(!A || !B) return null;
-        const L = A.x <= B.x ? A : B, R = A.x <= B.x ? B : A;
-        if(put(idL, {x: L.x, y: L.y - (lift||0)})) set++;
-        if(put(idR, {x: R.x, y: R.y - (lift||0)})) set++;
-        return {L, R};
-      };
-      const headPair = VIEWS[view].headKp === 'ear'
-        ? ['left_ear','right_ear'] : ['left_eye','right_eye'];
-      const hd = pair(headPair[0], headPair[1], 'headL', 'headR', 0);
-      /* Schultern: KI liefert das Gelenk zu weit innen und zu tief – nach
-         außen und oben auf den höchsten Punkt der Schulter (Acromion)
-         schieben, damit die Schulterlinie stimmt */
-      const shoulderPair = ()=>{
-        const A = get('left_shoulder'), B = get('right_shoulder');
-        if(!A || !B) return null;
-        const L = A.x <= B.x ? A : B, R = A.x <= B.x ? B : A;
-        const out = (R.x - L.x) * SHOULDER_OUT;
-        const up  = (R.x - L.x) * SHOULDER_UP;
-        const Lo = {x: L.x - out, y: L.y - up}, Ro = {x: R.x + out, y: R.y - up};
-        if(put('shL', Lo)) set++;
-        if(put('shR', Ro)) set++;
-        return {L: Lo, R: Ro};
-      };
-      const sh = shoulderPair();
-      if(!hd && VIEWS[view].headKp === 'ear' && sh){
-        /* Ohren sind von hinten oft unsicher: Ohrhöhe aus der Schulterbreite schätzen */
-        const mx2 = (sh.L.x + sh.R.x)/2, my2 = (sh.L.y + sh.R.y)/2;
-        const w2 = Math.max(24, sh.R.x - sh.L.x);
-        const hy = my2 - w2*0.52;
-        if(hy >= 0){                    /* Kopf abgeschnitten -> keine Phantompunkte */
-          let hSet = 0;
-          if(put('headL', {x: mx2 - w2*0.16, y: hy})) hSet++;
-          if(put('headR', {x: mx2 + w2*0.16, y: hy})) hSet++;
-          if(hSet){ set += hSet; est.push('Ohrlinie'); }
-        }
-      }
-      const hipL = get('left_hip'), hipR = get('right_hip');
-      if(sh && hipL && hipR){
-        const bodyScale = Math.abs(((hipL.y + hipR.y)/2) - ((sh.L.y + sh.R.y)/2));
-        const s0 = set;
-        pair('left_hip','right_hip','hipL','hipR', bodyScale * 0.20);
-        if(set > s0) est.push('Beckenkamm');   /* nur melden, wenn wirklich geschätzt-gesetzt */
-      }
-      pair('left_ankle','right_ankle','ankL','ankR', 0);
-    }
+    let set = 0;
+    for(const l of VIEWS[view].landmarks)
+      if(put(l.id,corrected.suggested[l.id])) set++;
 
     if(!set){
       /* nur melden, wenn wirklich noch Punkte fehlen – sonst hat der Nutzer
@@ -1891,7 +2004,7 @@ async function runKI(){
     } else {
       state = nextTarget() ? 'placing' : 'done';
       kiMsgShow(`KI hat ${set} Punkt${set === 1 ? '' : 'e'} vorgeschlagen`
-        + (est.length ? ` (geschätzt: ${est.join(', ')})` : '')
+        + (corrected.estimated.length ? ` (geschätzt: ${corrected.estimated.join(', ')})` : '')
         + ' – bitte jeden Punkt prüfen und bei Bedarf ziehen.'
         + (nextTarget() ? ' Fehlende Punkte manuell tippen.' : ''));
     }
@@ -2160,7 +2273,7 @@ async function buildPreview(ids){
   $('previewCard').style.display = 'block';
   const cssW = box.clientWidth || 340;
   const dpr = window.devicePixelRatio || 1;
-  const cssH = Math.min(Math.round(cssW * STD_ASPECT), Math.round(window.innerHeight * 0.72));
+  const cssH = Math.min(Math.round(cssW * BODY_TILE_ASPECT), Math.round(window.innerHeight * 0.72));
   await Promise.all(sel.map(async (s, i)=>{
     const im = await ensureImg(s);
     const cv = box.children[i].querySelector('canvas');
@@ -2168,7 +2281,7 @@ async function buildPreview(ids){
     cv.style.height = cssH + 'px';
     const c2 = cv.getContext('2d');
     c2.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const n = stdFit(s, cssW, cssH);
+    const n = normalizedBodyFit(s, cssW, cssH);
     paintAnalysis(c2, im, s.iw, s.ih, s.pts, s.view, cssW, cssH, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0);
   }));
   $('previewCard').scrollIntoView({behavior:'smooth', block:'start'});
@@ -2236,9 +2349,9 @@ $('btnExamPDF').addEventListener('click', async ()=>{
     const items = [];
     for(const s of sel){
       const im = await ensureImg(s);
-      const rw = 600, rh = Math.round(rw * STD_ASPECT);   /* Standard-Format, Person normiert */
+      const rw = 600, rh = Math.round(rw * BODY_TILE_ASPECT);   /* Standard-Format, Person normiert */
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      const n = stdFit(s, rw, rh);
+      const n = normalizedBodyFit(s, rw, rh);
       paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
       items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: rw / rh, label: VIEWS[s.view].label});
     }
@@ -2304,9 +2417,9 @@ $('btnCmpPDF').addEventListener('click', async ()=>{
     const items = [];
     for(const s of sel){
       const im = await ensureCutout(s);
-      const rw = 600, rh = Math.round(rw * STD_ASPECT);   /* Standard-Format, Person normiert */
+      const rw = 600, rh = Math.round(rw * BODY_TILE_ASPECT);   /* Standard-Format, Person normiert */
       const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-      const n = stdFit(s, rw, rh);
+      const n = normalizedBodyFit(s, rw, rh);
       paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
       items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: rw / rh, label: fmtDate(s.dateStr)});
     }
@@ -2517,9 +2630,9 @@ async function buildExamComparePDF(sel, dates){
       const items = [];
       for(const s of [sa, sb]){
         const im = await ensureCutout(s);
-        const rw = 600, rh = Math.round(rw * STD_ASPECT);   /* Standard-Format, Person normiert */
+        const rw = 600, rh = Math.round(rw * BODY_TILE_ASPECT);   /* Standard-Format, Person normiert */
         const oc = document.createElement('canvas'); oc.width = rw; oc.height = rh;
-        const n = stdFit(s, rw, rh);
+        const n = normalizedBodyFit(s, rw, rh);
         paintAnalysis(oc.getContext('2d'), im, s.iw, s.ih, s.pts, s.view, rw, rh, n.zz, n.ox, n.oy, false, fmtDate(s.dateStr), s.plumbOff || 0, false, s.plumbTilt || 0, '#FFFFFF');
         items.push({data: oc.toDataURL('image/jpeg', 0.88), ar: rw / rh, label: fmtDate(s.dateStr)});
       }
